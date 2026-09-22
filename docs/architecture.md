@@ -41,17 +41,19 @@
 - Citizen issue reporting form with file upload dropzone and preview.
 - Browser HTML5 Geolocation integration (`navigator.geolocation.getCurrentPosition`) for automated coordinate capture.
 - Citizen complaint list and detail cards with tracking status indicators.
-- JWT authentication management (`localStorage` token retention, session status).
+- Municipal Administrator Dashboard (`/admin`) with live statistics, multi-criteria complaint filtering/search, and lifecycle status transition controls.
+- JWT authentication management (`localStorage` token retention, session status, RBAC view switching).
 - Communicates exclusively with Express API via `axios` at `http://localhost:5000/api`.
 
 ### 2.2 Express Backend (`backend/`)
 - REST API layer providing:
   - `/api/auth`: User registration, login, JWT verification.
   - `/api/complaints`: Complaint reporting, list, and single-complaint inspection.
+  - `/api/admin`: Municipal administrator complaint listing, search, status modification, and aggregate statistics.
   - `/api/predict`: Standalone ML proxy endpoint.
   - `/api/health` & `/api/ml/health`: System health and status probes.
 - Middleware architecture:
-  - `authMiddleware`: Enforces valid Bearer JWT tokens on protected routes (`req.user`).
+  - `authMiddleware`: Enforces valid Bearer JWT tokens on protected routes (`protect`) and role-based access (`requireAdmin`, `authorizeRoles`).
   - `uploadMiddleware`: Validates file types (`.jpg`, `.jpeg`, `.png`, `.webp`) and enforces 10MB limits via Multer.
   - `errorHandler`: Structured error formatting with HTTP status codes.
 - Persists complaint documents to MongoDB with linked `user` ObjectId, generated `CE-YYYY-NNNNNN` tracking ID, location data, and detection metadata.

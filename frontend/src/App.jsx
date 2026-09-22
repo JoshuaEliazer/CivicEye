@@ -31,6 +31,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import './App.css';
+import AdminDashboard from './components/AdminDashboard.jsx';
 
 // Express Backend REST API URL - All client communication routes through here
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -61,6 +62,27 @@ function App() {
   const [authError, setAuthError] = useState(null);
   const [authSuccess, setAuthSuccess] = useState(null);
   const [protectedTestResult, setProtectedTestResult] = useState(null);
+
+  // View Routing State (Phase 8: 'citizen' | 'admin')
+  const [currentView, setCurrentView] = useState(() =>
+    window.location.pathname.startsWith('/admin') ? 'admin' : 'citizen'
+  );
+
+  const navigateTo = (view) => {
+    setCurrentView(view);
+    const targetPath = view === 'admin' ? '/admin' : '/';
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState(null, '', targetPath);
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentView(window.location.pathname.startsWith('/admin') ? 'admin' : 'citizen');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Complaint Reporting State (Phase 7)
   const [complaintFile, setComplaintFile] = useState(null);
@@ -214,6 +236,7 @@ function App() {
     setAuthError(null);
     setProtectedTestResult(null);
     setMyComplaints([]);
+    navigateTo('citizen');
   };
 
   const testProtectedRoute = async (withToken = true) => {
@@ -422,6 +445,23 @@ function App() {
         </div>
 
         <div className="header-actions">
+          {currentUser?.role === 'ADMIN' && (
+            <div className="view-switcher-group">
+              <button
+                className={`view-switch-btn ${currentView === 'citizen' ? 'active' : ''}`}
+                onClick={() => navigateTo('citizen')}
+              >
+                <User size={13} /> Citizen
+              </button>
+              <button
+                className={`view-switch-btn ${currentView === 'admin' ? 'active' : ''}`}
+                onClick={() => navigateTo('admin')}
+              >
+                <Shield size={13} /> Admin
+              </button>
+            </div>
+          )}
+
           {currentUser ? (
             <div className="user-badge-group">
               <div className="user-pill">
@@ -447,8 +487,20 @@ function App() {
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="hero">
+      {/* View Branching: Admin Dashboard (Phase 8) vs Citizen Portal */}
+      {currentView === 'admin' ? (
+        <AdminDashboard
+          BACKEND_URL={BACKEND_URL}
+          authToken={authToken}
+          currentUser={currentUser}
+          getStatusBadge={getStatusBadge}
+          getIssueBadgeColor={getIssueBadgeColor}
+          onNavigateToCitizen={() => navigateTo('citizen')}
+        />
+      ) : (
+        <>
+          {/* Hero */}
+          <section className="hero">
         <div className="hero-pill">
           <ShieldCheck size={14} />
           Phase 7: Civic Complaint Reporting & Persistence Active
@@ -1283,6 +1335,8 @@ function App() {
           </div>
         </div>
       </section>
+      </>
+      )}
 
       {/* Footer */}
       <footer className="footer">

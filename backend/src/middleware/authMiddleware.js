@@ -79,7 +79,27 @@ export const authorizeRoles = (...roles) => {
   };
 };
 
+/**
+ * Middleware ensuring the requester is an authenticated administrator.
+ * 1. Checks JWT validity & loads user via `protect`.
+ * 2. Verifies that req.user.role === 'ADMIN'.
+ */
+export const requireAdmin = [
+  protect,
+  (req, res, next) => {
+    if (!req.user || req.user.role !== 'ADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied: Administrator privileges required.',
+        error: 'FORBIDDEN_ADMIN_REQUIRED',
+      });
+    }
+    next();
+  },
+];
+
 export default {
   protect,
   authorizeRoles,
+  requireAdmin,
 };

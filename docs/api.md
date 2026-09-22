@@ -140,7 +140,69 @@ Retrieves full details of a specific complaint by its human-readable `complaintI
 
 ---
 
-### 2.2 Authentication API (`/api/auth`)
+### 2.2 Municipal Admin API (`/api/admin`)
+
+All administrative endpoints require an authenticated user with server-side role `ADMIN`. Requests from normal `USER` citizens receive `403 Forbidden`.
+
+#### 2.2.1 Get All Complaints: `GET /api/admin/complaints`
+Retrieves a paginated list of complaints across all users, sorted newest first.
+- **Access**: Protected (`ADMIN` only)
+- **Query Parameters**:
+  - `page` (Integer, default `1`): Page number.
+  - `limit` (Integer, default `10`, max `100`): Complaints per page.
+  - `search` (String, optional): Case-insensitive keyword search on `complaintId`, `description`, `issueType`, `location.address`.
+  - `issueType` (String, optional): `pothole`, `leakage`, `garbage`, `other`, `none`.
+  - `status` (String, optional): `submitted`, `under_review`, `in_progress`, `resolved`, `rejected`.
+- **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "complaints": [...],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 25,
+      "totalPages": 3
+    }
+  }
+  ```
+
+#### 2.2.2 Get Detailed Complaint: `GET /api/admin/complaints/:complaintId`
+Retrieves full details of a specific complaint, including reporter name/email, model variant, confidence, and bounding box detections.
+- **Access**: Protected (`ADMIN` only)
+- **Response (200 OK)**: Returns full complaint document with populated reporter object.
+
+#### 2.2.3 Update Status: `PATCH /api/admin/complaints/:complaintId/status`
+Updates complaint lifecycle state.
+- **Access**: Protected (`ADMIN` only)
+- **Body**: `{"status": "in_progress"}` (`submitted`, `under_review`, `in_progress`, `resolved`, `rejected`)
+- **Response (200 OK)**: Returns updated complaint object and confirmation message.
+
+#### 2.2.4 Municipal Statistics: `GET /api/admin/statistics`
+Retrieves real-time database-derived aggregate counts.
+- **Access**: Protected (`ADMIN` only)
+- **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "statistics": {
+      "totalComplaints": 25,
+      "submitted": 8,
+      "underReview": 5,
+      "inProgress": 7,
+      "resolved": 4,
+      "rejected": 1,
+      "potholes": 12,
+      "leakages": 6,
+      "garbage": 5,
+      "other": 2
+    }
+  }
+  ```
+
+---
+
+### 2.3 Authentication API (`/api/auth`)
 
 #### 2.2.1 Register: `POST /api/auth/register`
 - **Body**: `{"name": "string", "email": "string", "password": "string", "role": "USER | ADMIN"}`
