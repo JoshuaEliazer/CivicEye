@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: civiceye_mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - civiceye_network
+
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: civiceye_ml_service
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - MODEL_PATH=model/yolo26n.pt
+      - CONFIDENCE_THRESHOLD=0.50
+    networks:
+      - civiceye_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: civiceye_backend
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - MONGODB_URI=mongodb://mongodb:27017/civiceye
+      - ML_SERVICE_URL=http://ml-service:8000
+    depends_on:
+      - mongodb
+      - ml-service
+    networks:
+      - civiceye_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: civiceye_frontend
+    restart: always
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:5000/api
+    depends_on:
+      - backend
+    networks:
+      - civiceye_network
+
+networks:
+  civiceye_network:
+    driver: bridge
+
+volumes:
+  mongodb_data:

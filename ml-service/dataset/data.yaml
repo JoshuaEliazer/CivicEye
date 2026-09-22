@@ -1,0 +1,9 @@
+# CivicEye Custom Civic Issue Dataset Configuration
+path: ./dataset
+train: images/train
+val: images/val
+
+names:
+  0: pothole
+  1: leakage
+  2: garbage
