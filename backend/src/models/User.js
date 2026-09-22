@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema(
   {
@@ -39,6 +40,35 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Pre-save middleware to hash password if modified
+userSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) {
+    return next();
+  }
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Instance method to verify password
+userSchema.methods.comparePassword = async function (candidatePassword) {
+  if (!candidatePassword || !this.password) return false;
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Ensure password hash is never exposed when serialized to JSON
+userSchema.set('toJSON', {
+  transform: (doc, ret) => {
+    delete ret.password;
+    delete ret.__v;
+    return ret;
+  },
+});
 
 const User = mongoose.model('User', userSchema);
 

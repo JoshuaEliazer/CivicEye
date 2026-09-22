@@ -14,6 +14,13 @@ import {
   AlertTriangle,
   Zap,
   Info,
+  User,
+  Lock,
+  Mail,
+  UserCheck,
+  LogOut,
+  Shield,
+  KeyRound,
 } from 'lucide-react';
 import './App.css';
 
@@ -25,7 +32,29 @@ function App() {
   const [mlStatus, setMlStatus] = useState({ loading: true, online: false, data: null });
   const [lastChecked, setLastChecked] = useState(new Date());
 
-  // Prediction tester state
+  // Authentication State
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('civiceye_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('civiceye_token') || '');
+  const [authTab, setAuthTab] = useState('login'); // 'login' | 'register'
+  const [authFormData, setAuthFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'USER',
+  });
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState(null);
+  const [authSuccess, setAuthSuccess] = useState(null);
+  const [protectedTestResult, setProtectedTestResult] = useState(null);
+
+  // Prediction tester state (Phase 5)
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [confidenceParam, setConfidenceParam] = useState('0.50');
@@ -61,6 +90,99 @@ function App() {
     checkServices();
   }, []);
 
+  // Auth Handlers
+  const handleAuthInputChange = (e) => {
+    const { name, value } = e.target;
+    setAuthFormData((prev) => ({ ...prev, [name]: value }));
+    setAuthError(null);
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError(null);
+    setAuthSuccess(null);
+
+    try {
+      const res = await axios.post(`${BACKEND_URL}/auth/register`, {
+        name: authFormData.name,
+        email: authFormData.email,
+        password: authFormData.password,
+        role: authFormData.role,
+      });
+
+      const { token, user, message } = res.data;
+      setAuthToken(token);
+      setCurrentUser(user);
+      localStorage.setItem('civiceye_token', token);
+      localStorage.setItem('civiceye_user', JSON.stringify(user));
+      setAuthSuccess(message || 'Registration successful!');
+      setAuthFormData({ name: '', email: '', password: '', role: 'USER' });
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Registration failed.';
+      setAuthError(msg);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError(null);
+    setAuthSuccess(null);
+
+    try {
+      const res = await axios.post(`${BACKEND_URL}/auth/login`, {
+        email: authFormData.email,
+        password: authFormData.password,
+      });
+
+      const { token, user, message } = res.data;
+      setAuthToken(token);
+      setCurrentUser(user);
+      localStorage.setItem('civiceye_token', token);
+      localStorage.setItem('civiceye_user', JSON.stringify(user));
+      setAuthSuccess(message || 'Login successful!');
+      setAuthFormData((prev) => ({ ...prev, password: '' }));
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Login failed.';
+      setAuthError(msg);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setAuthToken('');
+    localStorage.removeItem('civiceye_token');
+    localStorage.removeItem('civiceye_user');
+    setAuthSuccess('Logged out successfully.');
+    setAuthError(null);
+    setProtectedTestResult(null);
+  };
+
+  const testProtectedRoute = async (withToken = true) => {
+    setProtectedTestResult(null);
+    try {
+      const headers = withToken && authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await axios.get(`${BACKEND_URL}/auth/me`, { headers, timeout: 4000 });
+      setProtectedTestResult({
+        success: true,
+        status: res.status,
+        data: res.data,
+      });
+    } catch (err) {
+      setProtectedTestResult({
+        success: false,
+        status: err.response?.status || 500,
+        data: err.response?.data || { message: err.message },
+      });
+    }
+  };
+
+  // Prediction Handlers (Phase 5)
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -97,9 +219,13 @@ function App() {
     }
 
     try {
-      // Forward to Express -> FastAPI -> YOLO26
+      const headers = { 'Content-Type': 'multipart/form-data' };
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
       const response = await axios.post(`${BACKEND_URL}/predict`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers,
         timeout: 15000,
       });
 
@@ -142,17 +268,37 @@ function App() {
           </div>
         </div>
 
-        <button className="btn btn-secondary" onClick={checkServices}>
-          <RefreshCw size={16} />
-          Check Status
-        </button>
+        <div className="header-actions">
+          {currentUser ? (
+            <div className="user-badge-group">
+              <div className="user-pill">
+                <UserCheck size={16} color="#34d399" />
+                <span className="user-name">{currentUser.name}</span>
+                <span className="user-role-badge">{currentUser.role}</span>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={handleLogout} title="Sign Out">
+                <LogOut size={14} />
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <span className="guest-badge">
+              <User size={14} /> Citizen Guest
+            </span>
+          )}
+
+          <button className="btn btn-secondary" onClick={checkServices}>
+            <RefreshCw size={16} />
+            Check Status
+          </button>
+        </div>
       </header>
 
       {/* Hero */}
       <section className="hero">
         <div className="hero-pill">
           <ShieldCheck size={14} />
-          Phase 5: Express ↔ FastAPI ML Integration Active
+          Phase 6: JWT & Bcrypt Authentication Active
         </div>
         <h2 className="hero-title">
           Smart Detection for <span>Cleaner & Safer Cities</span>
@@ -171,7 +317,7 @@ function App() {
             <div className="card-header">
               <div>
                 <h3 className="service-title">React Client</h3>
-                <p className="service-desc">Vite, React 18, Axios</p>
+                <p className="service-desc">Vite, React 18, JWT Auth</p>
               </div>
               <span className="badge badge-success">
                 <CheckCircle2 size={12} /> Active
@@ -180,12 +326,14 @@ function App() {
           </div>
           <div>
             <div className="status-row">
-              <span className="status-label">Route Flow</span>
-              <span className="status-val">React → Express Only</span>
+              <span className="status-label">Auth Session</span>
+              <span className="status-val" style={{ color: currentUser ? '#34d399' : '#9ca3af' }}>
+                {currentUser ? `${currentUser.role} Authenticated` : 'Guest Session'}
+              </span>
             </div>
             <div className="status-row" style={{ marginTop: '0.5rem' }}>
-              <span className="status-label">Environment</span>
-              <span className="status-val">{import.meta.env.MODE}</span>
+              <span className="status-label">Route Flow</span>
+              <span className="status-val">React → Express Only</span>
             </div>
           </div>
         </div>
@@ -196,7 +344,7 @@ function App() {
             <div className="card-header">
               <div>
                 <h3 className="service-title">Express REST API</h3>
-                <p className="service-desc">Node.js, Multer, Proxy Orchestration</p>
+                <p className="service-desc">Node.js, JWT, Bcrypt, Multer</p>
               </div>
               {backendStatus.loading ? (
                 <span className="badge badge-warning">Checking...</span>
@@ -222,8 +370,8 @@ function App() {
               </span>
             </div>
             <div className="status-row" style={{ marginTop: '0.5rem' }}>
-              <span className="status-label">Port</span>
-              <span className="status-val">5000</span>
+              <span className="status-label">Auth Endpoints</span>
+              <span className="status-val">/api/auth/* Active</span>
             </div>
           </div>
         </div>
@@ -263,6 +411,238 @@ function App() {
           </div>
         </div>
       </div>
+
+      {/* Phase 6: Authentication & User Management Panel */}
+      <section className="glass-panel auth-panel">
+        <div className="panel-header">
+          <div className="panel-title-group">
+            <div className="panel-icon auth-icon">
+              <Lock size={20} color="#3b82f6" />
+            </div>
+            <div>
+              <h3 className="panel-title">User Authentication & Session Management (Phase 6)</h3>
+              <p className="panel-subtitle">
+                Secure JWT & Bcrypt Authentication with role-based protected route enforcement
+              </p>
+            </div>
+          </div>
+          <span className="badge badge-pill">JWT + Bcrypt (10 Rounds)</span>
+        </div>
+
+        <div className="auth-grid">
+          {/* Auth Form / User Info */}
+          <div className="auth-form-card">
+            {!currentUser ? (
+              <>
+                <div className="auth-tab-switch">
+                  <button
+                    className={`tab-btn ${authTab === 'login' ? 'active' : ''}`}
+                    onClick={() => {
+                      setAuthTab('login');
+                      setAuthError(null);
+                      setAuthSuccess(null);
+                    }}
+                  >
+                    Login
+                  </button>
+                  <button
+                    className={`tab-btn ${authTab === 'register' ? 'active' : ''}`}
+                    onClick={() => {
+                      setAuthTab('register');
+                      setAuthError(null);
+                      setAuthSuccess(null);
+                    }}
+                  >
+                    Register
+                  </button>
+                </div>
+
+                <form
+                  onSubmit={authTab === 'login' ? handleLogin : handleRegister}
+                  className="auth-form"
+                >
+                  {authTab === 'register' && (
+                    <div className="form-group">
+                      <label htmlFor="auth-name">Full Name</label>
+                      <div className="input-with-icon">
+                        <User size={16} className="input-icon" />
+                        <input
+                          id="auth-name"
+                          type="text"
+                          name="name"
+                          placeholder="e.g. Maya Sharma"
+                          value={authFormData.name}
+                          onChange={handleAuthInputChange}
+                          required
+                          minLength={2}
+                          className="text-input"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="form-group">
+                    <label htmlFor="auth-email">Email Address</label>
+                    <div className="input-with-icon">
+                      <Mail size={16} className="input-icon" />
+                      <input
+                        id="auth-email"
+                        type="email"
+                        name="email"
+                        placeholder="citizen@civiceye.local"
+                        value={authFormData.email}
+                        onChange={handleAuthInputChange}
+                        required
+                        className="text-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="auth-password">Password (min. 6 characters)</label>
+                    <div className="input-with-icon">
+                      <Lock size={16} className="input-icon" />
+                      <input
+                        id="auth-password"
+                        type="password"
+                        name="password"
+                        placeholder="••••••••"
+                        value={authFormData.password}
+                        onChange={handleAuthInputChange}
+                        required
+                        minLength={6}
+                        className="text-input"
+                      />
+                    </div>
+                  </div>
+
+                  {authTab === 'register' && (
+                    <div className="form-group">
+                      <label htmlFor="auth-role">Account Role</label>
+                      <div className="input-with-icon">
+                        <Shield size={16} className="input-icon" />
+                        <select
+                          id="auth-role"
+                          name="role"
+                          value={authFormData.role}
+                          onChange={handleAuthInputChange}
+                          className="text-input"
+                        >
+                          <option value="USER">USER (Citizen)</option>
+                          <option value="ADMIN">ADMIN (Municipal Officer)</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {authError && (
+                    <div className="auth-alert error">
+                      <AlertCircle size={16} />
+                      <span>{authError}</span>
+                    </div>
+                  )}
+
+                  {authSuccess && (
+                    <div className="auth-alert success">
+                      <CheckCircle2 size={16} />
+                      <span>{authSuccess}</span>
+                    </div>
+                  )}
+
+                  <button type="submit" className="btn btn-primary" disabled={authLoading}>
+                    {authLoading ? (
+                      <>
+                        <RefreshCw size={16} className="spin-icon" /> Processing...
+                      </>
+                    ) : authTab === 'login' ? (
+                      <>
+                        <KeyRound size={16} /> Sign In
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck size={16} /> Create Account
+                      </>
+                    )}
+                  </button>
+                </form>
+              </>
+            ) : (
+              <div className="logged-in-card">
+                <div className="profile-header">
+                  <div className="avatar-circle">{currentUser.name?.charAt(0).toUpperCase()}</div>
+                  <div>
+                    <h4 className="profile-name">{currentUser.name}</h4>
+                    <p className="profile-email">{currentUser.email}</p>
+                    <span className="badge badge-success" style={{ marginTop: '0.25rem' }}>
+                      {currentUser.role}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="session-token-info">
+                  <span className="token-label">Active JWT Bearer Token:</span>
+                  <code className="token-snippet">
+                    {authToken.substring(0, 36)}...{authToken.substring(authToken.length - 12)}
+                  </code>
+                </div>
+
+                <div className="profile-actions">
+                  <button className="btn btn-secondary" onClick={handleLogout}>
+                    <LogOut size={16} /> Sign Out
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Protected Route Verification Card */}
+          <div className="auth-verify-card">
+            <h4 className="result-header">Protected Route Verification</h4>
+            <p className="verify-desc">
+              Test Express JWT authentication middleware on <code>GET /api/auth/me</code>:
+            </p>
+
+            <div className="test-buttons-row">
+              <button
+                className="btn btn-primary"
+                onClick={() => testProtectedRoute(true)}
+                disabled={!authToken}
+              >
+                <Lock size={14} /> Test with Token
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => testProtectedRoute(false)}
+              >
+                <AlertTriangle size={14} /> Test without Token (Expect 401)
+              </button>
+            </div>
+
+            {protectedTestResult ? (
+              <div
+                className={`verify-result-box ${protectedTestResult.success ? 'success' : 'error'}`}
+              >
+                <div className="verify-status-row">
+                  <span className="status-tag">
+                    HTTP {protectedTestResult.status} {protectedTestResult.success ? 'OK' : 'Error'}
+                  </span>
+                  <span className="status-label">
+                    {protectedTestResult.success ? 'Token Verified' : 'Rejection Verified'}
+                  </span>
+                </div>
+                <pre className="json-output">
+                  {JSON.stringify(protectedTestResult.data, null, 2)}
+                </pre>
+              </div>
+            ) : (
+              <div className="empty-state" style={{ padding: '2rem 1rem' }}>
+                <KeyRound size={32} color="#475569" />
+                <p>Click a test button above to verify protected middleware response.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Phase 5: Image Prediction Testing Panel */}
       <section className="glass-panel prediction-panel">
