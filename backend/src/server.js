@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDB } from './config/db.js';
 import healthRoutes from './routes/healthRoutes.js';
+import predictRoutes from './routes/predictRoutes.js';
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api', healthRoutes);
+app.use('/api', predictRoutes);
 
 // Root route
 app.get('/', (req, res) => {
@@ -41,9 +43,11 @@ app.use((req, res, next) => {
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error('[CivicEye Error]:', err.stack || err);
-  res.status(err.status || 500).json({
+  const status = err.statusCode || err.status || 500;
+  res.status(status).json({
     success: false,
-    message: err.message || 'Internal Server Error'
+    message: err.message || 'Internal Server Error',
+    error: err.code || (status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_ERROR')
   });
 });
 
@@ -53,6 +57,8 @@ const startServer = async () => {
   app.listen(PORT, () => {
     console.log(`[CivicEye Backend] Server running on http://localhost:${PORT}`);
     console.log(`[CivicEye Backend] Health check at http://localhost:${PORT}/api/health`);
+    console.log(`[CivicEye Backend] Predict endpoint at http://localhost:${PORT}/api/predict`);
+    console.log(`[CivicEye Backend] ML Health proxy at http://localhost:${PORT}/api/ml/health`);
   });
 };
 
