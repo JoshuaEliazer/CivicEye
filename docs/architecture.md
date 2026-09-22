@@ -3,62 +3,121 @@
 ## 1. System Topology
 
 ```text
-                    ┌─────────────────┐
-                    │ React Frontend  │ (Vite, Leaflet, Axios)
-                    └────────┬────────┘
-                             │ HTTP/REST
-                             ▼
-                    ┌─────────────────┐
-                    │ Express Backend │ (Node.js, JWT, Multer)
-                    └───────┬─┬───────┘
-                            │ │
-                ┌───────────┘ └─────────────┐
-                │                           │
-                ▼                           ▼
-        ┌──────────────┐            ┌────────────────┐
-        │   MongoDB    │            │ Python FastAPI │
-        └──────────────┘            └───────┬────────┘
-                                            │
-                                            ▼
-                                    ┌─────────────────┐
-                                    │   YOLO26n       │
-                                    │ Pretrained /    │
-                                    │ Custom Model    │
-                                    └─────────────────┘
+                        ┌───────────────────────────────┐
+                        │   React Frontend (Vite)       │
+                        │   (Citizen Portal & History)  │
+                        └───────────────┬───────────────┘
+                                        │ HTTP / REST (JWT Bearer)
+                                        ▼
+                        ┌───────────────────────────────┐
+                        │   Express Backend (Node.js)   │
+                        │   Auth, Multer, Orchestration │
+                        └───┬───────────────────────┬───┘
+                            │                       │
+               Mongoose /   │                       │ HTTP Multipart Forwarding
+               MongoDB Wire │                       │
+                            ▼                       ▼
+                    ┌───────────────┐       ┌───────────────────────┐
+                    │    MongoDB    │       │ Python FastAPI Micro- │
+                    │ (Collections: │       │ service (Port 8000)   │
+                    │ users,        │       └───────────┬───────────┘
+                    │ complaints)   │                   │
+                    └───────────────┘                   ▼
+                                            ┌───────────────────────┐
+                                            │ Ultralytics YOLO26    │
+                                            │ Inference Engine      │
+                                            │ (yolo26n / custom)    │
+                                            └───────────────────────┘
 ```
+
+> [!IMPORTANT]
+> The React client communicates **only** with the Express backend. React never calls FastAPI directly, and FastAPI has no direct access to MongoDB.
+
+---
 
 ## 2. Component Boundaries & Responsibilities
 
 ### 2.1 React Frontend (`frontend/`)
-- Handles user interactions, camera/image uploads, GPS capture, issue reporting forms, and administrative dashboards.
-- Communicates **only** with the Express Backend REST API via `VITE_API_URL`. Never communicates directly with the Python ML service or MongoDB.
+- Citizen issue reporting form with file upload dropzone and preview.
+- Browser HTML5 Geolocation integration (`navigator.geolocation.getCurrentPosition`) for automated coordinate capture.
+- Citizen complaint list and detail cards with tracking status indicators.
+- JWT authentication management (`localStorage` token retention, session status).
+- Communicates exclusively with Express API via `axios` at `http://localhost:5000/api`.
 
 ### 2.2 Express Backend (`backend/`)
-- Acts as the central orchestrator and business logic layer.
-- Handles user authentication (JWT + bcrypt), file uploads via Multer, complaint lifecycle management, and admin workflows.
-- Forwards validated image data to the FastAPI ML service for civic issue inference.
-- Stores complaint metadata, detection results, and status in MongoDB via Mongoose.
+- REST API layer providing:
+  - `/api/auth`: User registration, login, JWT verification.
+  - `/api/complaints`: Complaint reporting, list, and single-complaint inspection.
+  - `/api/predict`: Standalone ML proxy endpoint.
+  - `/api/health` & `/api/ml/health`: System health and status probes.
+- Middleware architecture:
+  - `authMiddleware`: Enforces valid Bearer JWT tokens on protected routes (`req.user`).
+  - `uploadMiddleware`: Validates file types (`.jpg`, `.jpeg`, `.png`, `.webp`) and enforces 10MB limits via Multer.
+  - `errorHandler`: Structured error formatting with HTTP status codes.
+- Persists complaint documents to MongoDB with linked `user` ObjectId, generated `CE-YYYY-NNNNNN` tracking ID, location data, and detection metadata.
 
-### 2.3 Python FastAPI ML Service (`ml-service/`)
-- Exposes high-performance asynchronous REST endpoints (`GET /health`, `POST /predict`) for computer vision inference.
-- Loads Ultralytics YOLO26 models (`yolo26n.pt` baseline or custom fine-tuned `model/best.pt`).
-- Performs bounding box detection and classification across:
-  - `pothole` (class 0)
-  - `leakage` (class 1)
-  - `garbage` (class 2)
-- Returns structured JSON detection outputs with confidences and coordinate boxes.
+### 2.3 Python FastAPI ML Microservice (`ml-service/`)
+- Dedicated high-concurrency microservice running on Uvicorn.
+- Executes Ultralytics YOLO26 computer vision inference on image files.
+- Identifies civic issues across configured classes (`pothole`, `leakage`, `garbage`).
+- Computes confidence scores, uncertainty flags, and bounding box pixel coordinates.
 
-### 2.4 Database (`mongodb`)
-- Stores user credentials, profile records, and complaint objects with geospatial coordinates, status states (`PENDING`, `IN_PROGRESS`, `RESOLVED`, `REJECTED`), and detection metrics.
+### 2.4 MongoDB Persistence Layer
+- Document-oriented storage in `civiceye` database.
+- `users`: Citizen credentials with Bcrypt-hashed passwords.
+- `complaints`: Civic issue reports with tracking IDs, location coordinates, status, and YOLO26 detection results.
 
 ---
 
-## 3. Communication Protocol
+## 3. End-to-End Complaint Lifecycle (Phase 7)
 
-1. `Citizen` captures or selects an image in the React UI.
-2. `React` sends `multipart/form-data` with description and GPS coordinates to `POST /api/complaints` in Express.
-3. `Express` validates the payload and forwards the image binary to `POST /predict` in FastAPI.
-4. `FastAPI` passes the image to the loaded Ultralytics YOLO26 model.
-5. `YOLO26` predicts classes, confidence scores, and bounding boxes.
-6. `FastAPI` returns structured detection data to `Express`.
-7. `Express` synthesizes the complaint, generates a unique `complaintId`, persists the record in `MongoDB`, and responds to `React`.
+```text
+Citizen               React UI              Express API              FastAPI / YOLO26          MongoDB
+   │                      │                      │                          │                     │
+   │ 1. Fill report,      │                      │                          │                     │
+   │    select image,     │                      │                          │                     │
+   │    click Submit      │                      │                          │                     │
+   ├─────────────────────►│                      │                          │                     │
+   │                      │ 2. POST /complaints  │                          │                     │
+   │                      │    (Bearer Token +   │                          │                     │
+   │                      │     FormData)        │                          │                     │
+   │                      ├─────────────────────►│                          │                     │
+   │                      │                      │ 3. Verify JWT token      │                     │
+   │                      │                      │    Validate form & coords│                     │
+   │                      │                      │                          │                     │
+   │                      │                      │ 4. Forward image to      │                     │
+   │                      │                      │    POST /predict         │                     │
+   │                      │                      ├─────────────────────────►│                     │
+   │                      │                      │                          │ 5. YOLO26 inference │
+   │                      │                      │                          │    Predicts issue,  │
+   │                      │                      │                          │    conf, boxes      │
+   │                      │                      │ 6. Structured prediction │                     │
+   │                      │                      │◄─────────────────────────┤                     │
+   │                      │                      │                          │                     │
+   │                      │                      │ 7. Generate CE-YYYY-NNNN │                     │
+   │                      │                      │    Save Complaint doc    │                     │
+   │                      │                      ├───────────────────────────────────────────────►│
+   │                      │                      │ 8. Saved successfully    │                     │
+   │                      │                      │◄───────────────────────────────────────────────┤
+   │                      │ 9. 201 Created       │                          │                     │
+   │                      │    (Complaint JSON)  │                          │                     │
+   │                      │◄─────────────────────┤                          │                     │
+   │ 10. Display Tracking │                      │                          │                     │
+   │     ID & details     │                      │                          │                     │
+   │◄─────────────────────┤                      │                          │                     │
+```
+
+---
+
+## 4. Security & Data Isolation Architecture
+
+1. **Authentication Boundary**:
+   - `POST /api/complaints`, `GET /api/complaints`, and `GET /api/complaints/:complaintId` are protected by `protect` middleware.
+   - Unauthenticated requests are rejected immediately with `401 Unauthorized`.
+
+2. **Data Isolation**:
+   - `GET /api/complaints` filters queries strictly by `{ user: req.user._id }`. Citizens can never view complaints submitted by others.
+   - `GET /api/complaints/:complaintId` checks `complaint.user.equals(req.user._id) || req.user.role === 'ADMIN'`. Non-owners receive `403 Forbidden`.
+
+3. **No Direct Microservice Access**:
+   - The FastAPI ML service is accessible only within the backend network or localhost; the frontend never interacts with it directly.

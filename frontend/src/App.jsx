@@ -21,6 +21,14 @@ import {
   LogOut,
   Shield,
   KeyRound,
+  MapPin,
+  FileText,
+  List,
+  Calendar,
+  Crosshair,
+  Layers,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import './App.css';
 
@@ -32,7 +40,7 @@ function App() {
   const [mlStatus, setMlStatus] = useState({ loading: true, online: false, data: null });
   const [lastChecked, setLastChecked] = useState(new Date());
 
-  // Authentication State
+  // Authentication State (Phase 6)
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const saved = localStorage.getItem('civiceye_user');
@@ -53,6 +61,25 @@ function App() {
   const [authError, setAuthError] = useState(null);
   const [authSuccess, setAuthSuccess] = useState(null);
   const [protectedTestResult, setProtectedTestResult] = useState(null);
+
+  // Complaint Reporting State (Phase 7)
+  const [complaintFile, setComplaintFile] = useState(null);
+  const [complaintPreview, setComplaintPreview] = useState(null);
+  const [complaintDesc, setComplaintDesc] = useState('');
+  const [complaintLat, setComplaintLat] = useState('');
+  const [complaintLng, setComplaintLng] = useState('');
+  const [complaintAddress, setComplaintAddress] = useState('');
+  const [locating, setLocating] = useState(false);
+  const [submittingComplaint, setSubmittingComplaint] = useState(false);
+  const [complaintSuccess, setComplaintSuccess] = useState(null);
+  const [complaintError, setComplaintError] = useState(null);
+  const complaintFileRef = useRef(null);
+
+  // My Complaints List State (Phase 7)
+  const [myComplaints, setMyComplaints] = useState([]);
+  const [loadingComplaints, setLoadingComplaints] = useState(false);
+  const [complaintsError, setComplaintsError] = useState(null);
+  const [expandedComplaintId, setExpandedComplaintId] = useState(null);
 
   // Prediction tester state (Phase 5)
   const [selectedFile, setSelectedFile] = useState(null);
@@ -86,9 +113,34 @@ function App() {
     setLastChecked(new Date());
   };
 
+  const fetchMyComplaints = async () => {
+    if (!authToken) return;
+    setLoadingComplaints(true);
+    setComplaintsError(null);
+    try {
+      const res = await axios.get(`${BACKEND_URL}/complaints`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+        timeout: 5000,
+      });
+      setMyComplaints(res.data.complaints || []);
+    } catch (err) {
+      setComplaintsError(err.response?.data?.message || 'Failed to load complaints.');
+    } finally {
+      setLoadingComplaints(false);
+    }
+  };
+
   useEffect(() => {
     checkServices();
   }, []);
+
+  useEffect(() => {
+    if (authToken && currentUser) {
+      fetchMyComplaints();
+    } else {
+      setMyComplaints([]);
+    }
+  }, [authToken, currentUser]);
 
   // Auth Handlers
   const handleAuthInputChange = (e) => {
@@ -161,6 +213,7 @@ function App() {
     setAuthSuccess('Logged out successfully.');
     setAuthError(null);
     setProtectedTestResult(null);
+    setMyComplaints([]);
   };
 
   const testProtectedRoute = async (withToken = true) => {
@@ -179,6 +232,88 @@ function App() {
         status: err.response?.status || 500,
         data: err.response?.data || { message: err.message },
       });
+    }
+  };
+
+  // Geolocation Handler
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setComplaintLat(pos.coords.latitude.toFixed(6));
+        setComplaintLng(pos.coords.longitude.toFixed(6));
+        setLocating(false);
+      },
+      (err) => {
+        setLocating(false);
+        console.warn('Geolocation permission denied or failed:', err.message);
+        alert('Could not retrieve location. You may enter coordinates manually or submit without coordinates.');
+      },
+      { timeout: 8000 }
+    );
+  };
+
+  // Complaint Submit Handler (Phase 7)
+  const handleComplaintFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setComplaintFile(file);
+      setComplaintSuccess(null);
+      setComplaintError(null);
+      setComplaintPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSubmitComplaint = async (e) => {
+    e.preventDefault();
+    if (!complaintFile) {
+      setComplaintError('Please attach an evidence photo of the civic issue.');
+      return;
+    }
+    if (!authToken) {
+      setComplaintError('You must be logged in to submit a formal civic complaint.');
+      return;
+    }
+
+    setSubmittingComplaint(true);
+    setComplaintError(null);
+    setComplaintSuccess(null);
+
+    const formData = new FormData();
+    formData.append('image', complaintFile);
+    if (complaintDesc.trim()) formData.append('description', complaintDesc.trim());
+    if (complaintLat) formData.append('latitude', complaintLat);
+    if (complaintLng) formData.append('longitude', complaintLng);
+    if (complaintAddress.trim()) formData.append('address', complaintAddress.trim());
+
+    try {
+      const res = await axios.post(`${BACKEND_URL}/complaints`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${authToken}`,
+        },
+        timeout: 20000,
+      });
+
+      setComplaintSuccess(res.data.complaint);
+      setComplaintFile(null);
+      setComplaintPreview(null);
+      setComplaintDesc('');
+      setComplaintLat('');
+      setComplaintLng('');
+      setComplaintAddress('');
+      if (complaintFileRef.current) complaintFileRef.current.value = '';
+      fetchMyComplaints();
+    } catch (err) {
+      setComplaintError(
+        err.response?.data?.message || err.message || 'Failed to submit civic complaint.'
+      );
+    } finally {
+      setSubmittingComplaint(false);
     }
   };
 
@@ -254,6 +389,24 @@ function App() {
     }
   };
 
+  const getStatusBadge = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'submitted':
+      case 'pending':
+        return <span className="status-pill submitted">Submitted</span>;
+      case 'under_review':
+        return <span className="status-pill review">Under Review</span>;
+      case 'in_progress':
+        return <span className="status-pill progress">In Progress</span>;
+      case 'resolved':
+        return <span className="status-pill resolved">Resolved</span>;
+      case 'rejected':
+        return <span className="status-pill rejected">Rejected</span>;
+      default:
+        return <span className="status-pill">{status}</span>;
+    }
+  };
+
   return (
     <div className="app-container">
       {/* Header */}
@@ -298,7 +451,7 @@ function App() {
       <section className="hero">
         <div className="hero-pill">
           <ShieldCheck size={14} />
-          Phase 6: JWT & Bcrypt Authentication Active
+          Phase 7: Civic Complaint Reporting & Persistence Active
         </div>
         <h2 className="hero-title">
           Smart Detection for <span>Cleaner & Safer Cities</span>
@@ -317,7 +470,7 @@ function App() {
             <div className="card-header">
               <div>
                 <h3 className="service-title">React Client</h3>
-                <p className="service-desc">Vite, React 18, JWT Auth</p>
+                <p className="service-desc">Vite, React 18, Leaflet, Axios</p>
               </div>
               <span className="badge badge-success">
                 <CheckCircle2 size={12} /> Active
@@ -332,8 +485,8 @@ function App() {
               </span>
             </div>
             <div className="status-row" style={{ marginTop: '0.5rem' }}>
-              <span className="status-label">Route Flow</span>
-              <span className="status-val">React → Express Only</span>
+              <span className="status-label">Complaints</span>
+              <span className="status-val">{myComplaints.length} Submitted</span>
             </div>
           </div>
         </div>
@@ -344,7 +497,7 @@ function App() {
             <div className="card-header">
               <div>
                 <h3 className="service-title">Express REST API</h3>
-                <p className="service-desc">Node.js, JWT, Bcrypt, Multer</p>
+                <p className="service-desc">Node.js, JWT, Mongoose, Multer</p>
               </div>
               {backendStatus.loading ? (
                 <span className="badge badge-warning">Checking...</span>
@@ -370,8 +523,8 @@ function App() {
               </span>
             </div>
             <div className="status-row" style={{ marginTop: '0.5rem' }}>
-              <span className="status-label">Auth Endpoints</span>
-              <span className="status-val">/api/auth/* Active</span>
+              <span className="status-label">Complaint API</span>
+              <span className="status-val">/api/complaints Active</span>
             </div>
           </div>
         </div>
@@ -411,6 +564,327 @@ function App() {
           </div>
         </div>
       </div>
+
+      {/* Phase 7: Report Civic Issue Panel */}
+      <section className="glass-panel complaint-submit-panel">
+        <div className="panel-header">
+          <div className="panel-title-group">
+            <div className="panel-icon complaint-icon">
+              <FileText size={20} color="#3b82f6" />
+            </div>
+            <div>
+              <h3 className="panel-title">Report a Civic Issue (Phase 7)</h3>
+              <p className="panel-subtitle">
+                Upload problem photo, enter details, and persist complaint in MongoDB with AI classification
+              </p>
+            </div>
+          </div>
+          <span className="badge badge-pill">Express ↔ MongoDB ↔ YOLO26</span>
+        </div>
+
+        {!currentUser ? (
+          <div className="auth-required-banner">
+            <Lock size={20} color="#60a5fa" />
+            <div>
+              <h4>Authentication Required to File Complaints</h4>
+              <p>Please log in or register below to report an issue and receive a tracking Complaint ID.</p>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmitComplaint} className="complaint-form-grid">
+            {/* Image Selection Column */}
+            <div className="complaint-media-col">
+              <input
+                type="file"
+                ref={complaintFileRef}
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleComplaintFileChange}
+                style={{ display: 'none' }}
+                id="complaint-file-input"
+              />
+
+              {!complaintPreview ? (
+                <label htmlFor="complaint-file-input" className="complaint-dropzone">
+                  <Upload size={36} color="#60a5fa" />
+                  <span className="dropzone-title">Upload Evidence Photo</span>
+                  <span className="dropzone-hint">JPEG, PNG, WEBP (Max 10MB)</span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginTop: '0.75rem' }}
+                    onClick={() => complaintFileRef.current?.click()}
+                  >
+                    Select Photo
+                  </button>
+                </label>
+              ) : (
+                <div className="complaint-preview-card">
+                  <img src={complaintPreview} alt="Complaint preview" className="complaint-preview-img" />
+                  <div className="preview-meta">
+                    <span>{complaintFile?.name}</span>
+                    <span>{((complaintFile?.size || 0) / 1024).toFixed(1)} KB</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setComplaintFile(null);
+                      setComplaintPreview(null);
+                    }}
+                  >
+                    Change Image
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Fields Column */}
+            <div className="complaint-fields-col">
+              <div className="form-group">
+                <label htmlFor="complaint-desc">Problem Description</label>
+                <textarea
+                  id="complaint-desc"
+                  rows={3}
+                  className="text-input"
+                  placeholder="Describe the issue (e.g., Severe road pothole near market square causing traffic hazards)..."
+                  value={complaintDesc}
+                  onChange={(e) => setComplaintDesc(e.target.value)}
+                  maxLength={1000}
+                />
+              </div>
+
+              <div className="location-inputs-group">
+                <div className="location-header-row">
+                  <label>Geographic Coordinates (Optional)</label>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleGetLocation}
+                    disabled={locating}
+                  >
+                    {locating ? <RefreshCw size={14} className="spin-icon" /> : <Crosshair size={14} />}
+                    {locating ? 'Locating...' : 'Get My Location'}
+                  </button>
+                </div>
+
+                <div className="lat-lng-grid">
+                  <div className="input-with-icon">
+                    <MapPin size={16} className="input-icon" />
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Latitude (e.g. 12.9716)"
+                      className="text-input"
+                      value={complaintLat}
+                      onChange={(e) => setComplaintLat(e.target.value)}
+                      min="-90"
+                      max="90"
+                    />
+                  </div>
+                  <div className="input-with-icon">
+                    <MapPin size={16} className="input-icon" />
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Longitude (e.g. 77.5946)"
+                      className="text-input"
+                      value={complaintLng}
+                      onChange={(e) => setComplaintLng(e.target.value)}
+                      min="-180"
+                      max="180"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="complaint-address">Street Address / Landmark (Optional)</label>
+                <input
+                  id="complaint-address"
+                  type="text"
+                  className="text-input"
+                  placeholder="e.g. 5th Cross, Indiranagar, Bengaluru"
+                  value={complaintAddress}
+                  onChange={(e) => setComplaintAddress(e.target.value)}
+                  maxLength={500}
+                />
+              </div>
+
+              {complaintError && (
+                <div className="auth-alert error">
+                  <AlertCircle size={16} />
+                  <span>{complaintError}</span>
+                </div>
+              )}
+
+              {complaintSuccess && (
+                <div className="auth-alert success" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CheckCircle2 size={18} />
+                    <strong>Complaint Filed Successfully!</strong>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.85rem' }}>
+                    Tracking ID: <code style={{ color: '#fff', background: 'rgba(0,0,0,0.4)', padding: '2px 6px', borderRadius: '4px' }}>{complaintSuccess.complaintId}</code>
+                    &nbsp;&bull; Classified as: <strong>{complaintSuccess.issueType.toUpperCase()}</strong> ({(complaintSuccess.confidence * 100).toFixed(1)}%)
+                  </p>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={submittingComplaint}
+                style={{ marginTop: '0.5rem' }}
+              >
+                {submittingComplaint ? (
+                  <>
+                    <RefreshCw size={16} className="spin-icon" /> Submitting & Running YOLO26...
+                  </>
+                ) : (
+                  <>
+                    <FileText size={16} /> Submit Civic Complaint
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+
+      {/* Phase 7: My Submitted Complaints Section */}
+      {currentUser && (
+        <section className="glass-panel complaints-list-panel">
+          <div className="panel-header">
+            <div className="panel-title-group">
+              <div className="panel-icon">
+                <List size={20} color="#34d399" />
+              </div>
+              <div>
+                <h3 className="panel-title">My Submitted Complaints ({myComplaints.length})</h3>
+                <p className="panel-subtitle">Track the resolution status and detection metrics of your reports</p>
+              </div>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={fetchMyComplaints} disabled={loadingComplaints}>
+              <RefreshCw size={14} className={loadingComplaints ? 'spin-icon' : ''} />
+              Refresh
+            </button>
+          </div>
+
+          {loadingComplaints && (
+            <div className="empty-state">
+              <RefreshCw size={32} className="spin-icon" color="#3b82f6" />
+              <p>Loading your submitted complaints from MongoDB...</p>
+            </div>
+          )}
+
+          {!loadingComplaints && myComplaints.length === 0 && (
+            <div className="empty-state">
+              <FileText size={40} color="#475569" />
+              <p>No complaints submitted yet. Report your first civic issue above!</p>
+            </div>
+          )}
+
+          {!loadingComplaints && myComplaints.length > 0 && (
+            <div className="complaints-cards-grid">
+              {myComplaints.map((item) => {
+                const isExpanded = expandedComplaintId === item.complaintId;
+                return (
+                  <div key={item.complaintId} className="complaint-card">
+                    <div className="complaint-card-top">
+                      <div className="complaint-id-group">
+                        <span className="complaint-id-badge">{item.complaintId}</span>
+                        {getStatusBadge(item.status)}
+                      </div>
+                      <span className="complaint-date">
+                        {new Date(item.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+
+                    <div className="complaint-card-body">
+                      <div className="complaint-issue-row">
+                        <span
+                          className="issue-tag"
+                          style={{ backgroundColor: `${getIssueBadgeColor(item.issueType)}20`, color: getIssueBadgeColor(item.issueType), borderColor: `${getIssueBadgeColor(item.issueType)}40` }}
+                        >
+                          {item.issueType.toUpperCase()}
+                        </span>
+                        <span className="conf-score">
+                          {(item.confidence * 100).toFixed(1)}% Conf
+                        </span>
+                      </div>
+
+                      <p className="complaint-desc-snippet">{item.description}</p>
+
+                      <div className="complaint-meta-row">
+                        <span className="complaint-meta-item">
+                          <MapPin size={13} />
+                          {item.latitude && item.longitude ? `${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}` : 'No location'}
+                        </span>
+                        <span className="complaint-meta-item">
+                          <Layers size={13} />
+                          {item.detections?.length || 0} box(es)
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="complaint-card-footer">
+                      <button
+                        className="btn-details"
+                        onClick={() =>
+                          setExpandedComplaintId(isExpanded ? null : item.complaintId)
+                        }
+                      >
+                        {isExpanded ? (
+                          <>
+                            Hide Details <ChevronUp size={14} />
+                          </>
+                        ) : (
+                          <>
+                            View Details <ChevronDown size={14} />
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="complaint-expanded-details">
+                        <div className="detail-item">
+                          <span className="detail-label">Model Variant:</span>
+                          <span className="detail-val">{item.modelVariant} ({item.modelArchitecture})</span>
+                        </div>
+                        <div className="detail-item">
+                          <span className="detail-label">Image File:</span>
+                          <span className="detail-val">{item.image?.originalName || item.imageUrl}</span>
+                        </div>
+                        {item.location?.address && (
+                          <div className="detail-item">
+                            <span className="detail-label">Address:</span>
+                            <span className="detail-val">{item.location.address}</span>
+                          </div>
+                        )}
+                        {item.detections?.length > 0 && (
+                          <div className="detail-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                            <span className="detail-label" style={{ marginBottom: '4px' }}>Bounding Boxes:</span>
+                            <div className="boxes-scroll" style={{ width: '100%' }}>
+                              {item.detections.map((d, i) => (
+                                <div key={i} className="box-item">
+                                  <span>{d.class}</span>
+                                  <span>{(d.confidence * 100).toFixed(1)}%</span>
+                                  <span>[{d.bbox.join(', ')}]</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Phase 6: Authentication & User Management Panel */}
       <section className="glass-panel auth-panel">

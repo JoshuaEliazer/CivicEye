@@ -5,6 +5,7 @@ import { connectDB } from './config/db.js';
 import healthRoutes from './routes/healthRoutes.js';
 import predictRoutes from './routes/predictRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import complaintRoutes from './routes/complaintRoutes.js';
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api', healthRoutes);
 app.use('/api', predictRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/complaints', complaintRoutes);
 
 // Root route
 app.get('/', (req, res) => {
@@ -62,6 +64,7 @@ const startServer = async () => {
     console.log(`[CivicEye Backend] Predict endpoint at http://localhost:${PORT}/api/predict`);
     console.log(`[CivicEye Backend] ML Health proxy at http://localhost:${PORT}/api/ml/health`);
     console.log(`[CivicEye Backend] Auth API at http://localhost:${PORT}/api/auth`);
+    console.log(`[CivicEye Backend] Complaints API at http://localhost:${PORT}/api/complaints`);
   });
 };
 
