@@ -18,34 +18,40 @@ export const createComplaint = async (req, res, next) => {
       });
     }
 
-    // 2. Validate coordinates if provided
+    // 2. Validate coordinates if provided (Phase 9 strict numeric validation)
     let parsedLat = undefined;
     let parsedLng = undefined;
 
     const rawLat = req.body.latitude !== undefined ? req.body.latitude : req.query.latitude;
-    if (rawLat !== undefined && rawLat !== null && String(rawLat).trim() !== '') {
-      const lat = parseFloat(rawLat);
-      if (isNaN(lat) || lat < -90 || lat > 90) {
-        return res.status(400).json({
-          success: false,
-          message: 'Latitude must be a valid number between -90 and 90.',
-          error: 'INVALID_LATITUDE',
-        });
+    if (rawLat !== undefined && rawLat !== null) {
+      const trimmedLat = typeof rawLat === 'string' ? rawLat.trim() : rawLat;
+      if (trimmedLat !== '') {
+        const numLat = Number(trimmedLat);
+        if (isNaN(numLat) || !Number.isFinite(numLat) || numLat < -90 || numLat > 90) {
+          return res.status(400).json({
+            success: false,
+            message: 'Latitude must be a valid number between -90 and 90.',
+            error: 'INVALID_LATITUDE',
+          });
+        }
+        parsedLat = numLat;
       }
-      parsedLat = lat;
     }
 
     const rawLng = req.body.longitude !== undefined ? req.body.longitude : req.query.longitude;
-    if (rawLng !== undefined && rawLng !== null && String(rawLng).trim() !== '') {
-      const lng = parseFloat(rawLng);
-      if (isNaN(lng) || lng < -180 || lng > 180) {
-        return res.status(400).json({
-          success: false,
-          message: 'Longitude must be a valid number between -180 and 180.',
-          error: 'INVALID_LONGITUDE',
-        });
+    if (rawLng !== undefined && rawLng !== null) {
+      const trimmedLng = typeof rawLng === 'string' ? rawLng.trim() : rawLng;
+      if (trimmedLng !== '') {
+        const numLng = Number(trimmedLng);
+        if (isNaN(numLng) || !Number.isFinite(numLng) || numLng < -180 || numLng > 180) {
+          return res.status(400).json({
+            success: false,
+            message: 'Longitude must be a valid number between -180 and 180.',
+            error: 'INVALID_LONGITUDE',
+          });
+        }
+        parsedLng = numLng;
       }
-      parsedLng = lng;
     }
 
     // 3. Validate description

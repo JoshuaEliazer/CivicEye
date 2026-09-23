@@ -29,9 +29,13 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
+  Map as MapIcon,
 } from 'lucide-react';
+import 'leaflet/dist/leaflet.css';
 import './App.css';
 import AdminDashboard from './components/AdminDashboard.jsx';
+import LocationPicker from './components/LocationPicker.jsx';
+import ComplaintMap from './components/ComplaintMap.jsx';
 
 // Express Backend REST API URL - All client communication routes through here
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -97,11 +101,12 @@ function App() {
   const [complaintError, setComplaintError] = useState(null);
   const complaintFileRef = useRef(null);
 
-  // My Complaints List State (Phase 7)
+  // My Complaints List State (Phase 7 & Phase 9 View Modes)
   const [myComplaints, setMyComplaints] = useState([]);
   const [loadingComplaints, setLoadingComplaints] = useState(false);
   const [complaintsError, setComplaintsError] = useState(null);
   const [expandedComplaintId, setExpandedComplaintId] = useState(null);
+  const [citizenViewMode, setCitizenViewMode] = useState('list'); // 'list' | 'map'
 
   // Prediction tester state (Phase 5)
   const [selectedFile, setSelectedFile] = useState(null);
@@ -300,6 +305,23 @@ function App() {
     if (!authToken) {
       setComplaintError('You must be logged in to submit a formal civic complaint.');
       return;
+    }
+
+    // Client-side coordinate validation (Phase 9)
+    if (complaintLat !== '' && complaintLat !== undefined && complaintLat !== null) {
+      const numLat = Number(complaintLat);
+      if (isNaN(numLat) || !Number.isFinite(numLat) || numLat < -90 || numLat > 90) {
+        setComplaintError('Latitude must be a valid number between -90 and 90.');
+        return;
+      }
+    }
+
+    if (complaintLng !== '' && complaintLng !== undefined && complaintLng !== null) {
+      const numLng = Number(complaintLng);
+      if (isNaN(numLng) || !Number.isFinite(numLng) || numLng < -180 || numLng > 180) {
+        setComplaintError('Longitude must be a valid number between -180 and 180.');
+        return;
+      }
     }
 
     setSubmittingComplaint(true);
@@ -503,7 +525,7 @@ function App() {
           <section className="hero">
         <div className="hero-pill">
           <ShieldCheck size={14} />
-          Phase 7: Civic Complaint Reporting & Persistence Active
+          Phase 9: Geolocation, Maps & Civic Issue Visualization Active
         </div>
         <h2 className="hero-title">
           Smart Detection for <span>Cleaner & Safer Cities</span>
@@ -705,62 +727,17 @@ function App() {
                 />
               </div>
 
-              <div className="location-inputs-group">
-                <div className="location-header-row">
-                  <label>Geographic Coordinates (Optional)</label>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={handleGetLocation}
-                    disabled={locating}
-                  >
-                    {locating ? <RefreshCw size={14} className="spin-icon" /> : <Crosshair size={14} />}
-                    {locating ? 'Locating...' : 'Get My Location'}
-                  </button>
-                </div>
-
-                <div className="lat-lng-grid">
-                  <div className="input-with-icon">
-                    <MapPin size={16} className="input-icon" />
-                    <input
-                      type="number"
-                      step="any"
-                      placeholder="Latitude (e.g. 12.9716)"
-                      className="text-input"
-                      value={complaintLat}
-                      onChange={(e) => setComplaintLat(e.target.value)}
-                      min="-90"
-                      max="90"
-                    />
-                  </div>
-                  <div className="input-with-icon">
-                    <MapPin size={16} className="input-icon" />
-                    <input
-                      type="number"
-                      step="any"
-                      placeholder="Longitude (e.g. 77.5946)"
-                      className="text-input"
-                      value={complaintLng}
-                      onChange={(e) => setComplaintLng(e.target.value)}
-                      min="-180"
-                      max="180"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="complaint-address">Street Address / Landmark (Optional)</label>
-                <input
-                  id="complaint-address"
-                  type="text"
-                  className="text-input"
-                  placeholder="e.g. 5th Cross, Indiranagar, Bengaluru"
-                  value={complaintAddress}
-                  onChange={(e) => setComplaintAddress(e.target.value)}
-                  maxLength={500}
-                />
-              </div>
+              {/* Phase 9: Citizen Location Capture, Map Pinning & Confirmation */}
+              <LocationPicker
+                latitude={complaintLat}
+                longitude={complaintLng}
+                address={complaintAddress}
+                onChange={({ latitude, longitude, address: newAddr }) => {
+                  setComplaintLat(latitude);
+                  setComplaintLng(longitude);
+                  setComplaintAddress(newAddr);
+                }}
+              />
 
               {complaintError && (
                 <div className="auth-alert error">
@@ -803,7 +780,7 @@ function App() {
         )}
       </section>
 
-      {/* Phase 7: My Submitted Complaints Section */}
+      {/* Phase 7 & Phase 9: My Submitted Complaints Section */}
       {currentUser && (
         <section className="glass-panel complaints-list-panel">
           <div className="panel-header">
@@ -813,13 +790,35 @@ function App() {
               </div>
               <div>
                 <h3 className="panel-title">My Submitted Complaints ({myComplaints.length})</h3>
-                <p className="panel-subtitle">Track the resolution status and detection metrics of your reports</p>
+                <p className="panel-subtitle">Track the resolution status, detection metrics, and geospatial location of your reports</p>
               </div>
             </div>
-            <button className="btn btn-secondary btn-sm" onClick={fetchMyComplaints} disabled={loadingComplaints}>
-              <RefreshCw size={14} className={loadingComplaints ? 'spin-icon' : ''} />
-              Refresh
-            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div className="view-toggle-group">
+                <button
+                  type="button"
+                  className={`view-toggle-btn ${citizenViewMode === 'list' ? 'active' : ''}`}
+                  onClick={() => setCitizenViewMode('list')}
+                  title="Display complaints as a list"
+                >
+                  <List size={13} /> List
+                </button>
+                <button
+                  type="button"
+                  className={`view-toggle-btn ${citizenViewMode === 'map' ? 'active' : ''}`}
+                  onClick={() => setCitizenViewMode('map')}
+                  title="Display complaints on an interactive map"
+                >
+                  <MapIcon size={13} /> Map
+                </button>
+              </div>
+
+              <button className="btn btn-secondary btn-sm" onClick={fetchMyComplaints} disabled={loadingComplaints}>
+                <RefreshCw size={14} className={loadingComplaints ? 'spin-icon' : ''} />
+                Refresh
+              </button>
+            </div>
           </div>
 
           {loadingComplaints && (
@@ -836,7 +835,21 @@ function App() {
             </div>
           )}
 
-          {!loadingComplaints && myComplaints.length > 0 && (
+          {!loadingComplaints && myComplaints.length > 0 && citizenViewMode === 'map' && (
+            <ComplaintMap
+              complaints={myComplaints}
+              role="citizen"
+              height="480px"
+              getStatusBadge={getStatusBadge}
+              getIssueBadgeColor={getIssueBadgeColor}
+              onSelectComplaint={(item) => {
+                setCitizenViewMode('list');
+                setExpandedComplaintId(item.complaintId);
+              }}
+            />
+          )}
+
+          {!loadingComplaints && myComplaints.length > 0 && citizenViewMode === 'list' && (
             <div className="complaints-cards-grid">
               {myComplaints.map((item) => {
                 const isExpanded = expandedComplaintId === item.complaintId;

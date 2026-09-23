@@ -20,7 +20,9 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCcw,
+  Map as MapIcon,
 } from 'lucide-react';
+import ComplaintMap from './ComplaintMap.jsx';
 
 export default function AdminDashboard({
   BACKEND_URL,
@@ -30,6 +32,7 @@ export default function AdminDashboard({
   getIssueBadgeColor,
   onNavigateToCitizen,
 }) {
+  const [adminViewMode, setAdminViewMode] = useState('table'); // 'table' | 'map'
   const [stats, setStats] = useState({
     totalComplaints: 0,
     submitted: 0,
@@ -239,7 +242,7 @@ export default function AdminDashboard({
       <section className="hero admin-hero">
         <div className="hero-pill" style={{ borderColor: 'rgba(59, 130, 246, 0.4)', color: '#93c5fd' }}>
           <Shield size={14} />
-          Phase 8: Municipal Administration & Complaint Lifecycle Active
+          Phase 9: Municipal Administration & Geospatial Complaint Map Active
         </div>
         <div className="admin-hero-row">
           <div>
@@ -247,7 +250,7 @@ export default function AdminDashboard({
               Municipal <span>Admin Dashboard</span>
             </h2>
             <p className="hero-desc" style={{ maxWidth: '650px' }}>
-              Central monitoring, search, inspection, and status management for all civic issues submitted across the city.
+              Central monitoring, search, inspection, status management, and geospatial visualization for all civic issues submitted across the city.
             </p>
           </div>
           <div className="admin-hero-actions">
@@ -348,9 +351,28 @@ export default function AdminDashboard({
             <div>
               <h3 className="panel-title">City-Wide Complaints Register</h3>
               <p className="panel-subtitle">
-                Inspect details, reporter information, AI confidence scores, and update lifecycle states
+                Inspect details, reporter information, AI confidence scores, geospatial map, and update lifecycle states
               </p>
             </div>
+          </div>
+
+          <div className="view-toggle-group">
+            <button
+              type="button"
+              className={`view-toggle-btn ${adminViewMode === 'table' ? 'active' : ''}`}
+              onClick={() => setAdminViewMode('table')}
+              title="Display complaints in tabular register"
+            >
+              <Shield size={13} /> Table View
+            </button>
+            <button
+              type="button"
+              className={`view-toggle-btn ${adminViewMode === 'map' ? 'active' : ''}`}
+              onClick={() => setAdminViewMode('map')}
+              title="Display complaints on geospatial map"
+            >
+              <MapIcon size={13} /> Geospatial Map
+            </button>
           </div>
         </div>
 
@@ -417,120 +439,147 @@ export default function AdminDashboard({
           </div>
         </div>
 
-        {/* Complaints Table */}
-        <div className="table-responsive">
-          {loadingComplaints ? (
-            <div className="empty-state">
-              <RefreshCw size={32} className="spin-icon" color="#3b82f6" />
-              <p>Loading complaints from database...</p>
-            </div>
-          ) : complaintsError ? (
-            <div className="error-alert" style={{ margin: '1.5rem' }}>
-              <AlertCircle size={18} />
-              <span>{complaintsError}</span>
-            </div>
-          ) : complaints.length === 0 ? (
-            <div className="empty-state">
-              <AlertCircle size={40} color="#475569" />
-              <p>No complaints matched your search and filter criteria.</p>
-              <button className="btn btn-secondary btn-sm" onClick={handleResetFilters}>
-                Clear Filters
-              </button>
-            </div>
-          ) : (
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Complaint ID</th>
-                  <th>Issue & Confidence</th>
-                  <th>Status</th>
-                  <th>Reporter</th>
-                  <th>Location / Landmark</th>
-                  <th>Date</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {complaints.map((item) => (
-                  <tr key={item.complaintId} className="admin-table-row">
-                    <td>
-                      <span className="complaint-id-badge">{item.complaintId}</span>
-                    </td>
-                    <td>
-                      <div className="table-issue-cell">
-                        <span
-                          className="issue-tag"
-                          style={{
-                            backgroundColor: `${getIssueBadgeColor(item.issueType)}20`,
-                            color: getIssueBadgeColor(item.issueType),
-                            borderColor: `${getIssueBadgeColor(item.issueType)}40`,
-                          }}
-                        >
-                          {item.issueType?.toUpperCase()}
-                        </span>
-                        <span className="conf-score">
-                          {(item.confidence * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                    </td>
-                    <td>{getStatusBadge(item.status)}</td>
-                    <td>
-                      <div className="table-user-cell">
-                        <span className="reporter-name">{item.user?.name || item.userId?.name || 'Citizen'}</span>
-                        <span className="reporter-email">{item.user?.email || item.userId?.email || 'N/A'}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="table-address" title={item.location?.address || 'No address'}>
-                        {item.location?.address || (item.latitude && `${item.latitude.toFixed(3)}, ${item.longitude.toFixed(3)}`) || 'No GPS'}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="table-date">{new Date(item.createdAt).toLocaleDateString()}</span>
-                    </td>
-                    <td>
-                      <button
-                        className="btn btn-secondary btn-sm table-action-btn"
-                        onClick={() => openDetails(item.complaintId)}
-                      >
-                        <Eye size={13} /> Inspect
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Pagination Bar */}
-        {!loadingComplaints && complaints.length > 0 && (
-          <div className="pagination-bar">
-            <div className="pagination-info">
-              Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
-              {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
-              <strong>{pagination.total}</strong> complaints
-            </div>
-            <div className="pagination-controls">
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => handlePageChange(pagination.page - 1)}
-                disabled={pagination.page <= 1}
-              >
-                <ChevronLeft size={16} /> Previous
-              </button>
-              <span className="page-indicator">
-                Page {pagination.page} of {pagination.totalPages}
-              </span>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => handlePageChange(pagination.page + 1)}
-                disabled={pagination.page >= pagination.totalPages}
-              >
-                Next <ChevronRight size={16} />
-              </button>
-            </div>
+        {adminViewMode === 'map' ? (
+          <div style={{ padding: '1.25rem' }}>
+            {loadingComplaints ? (
+              <div className="empty-state">
+                <RefreshCw size={32} className="spin-icon" color="#3b82f6" />
+                <p>Loading complaints from database...</p>
+              </div>
+            ) : complaintsError ? (
+              <div className="error-alert" style={{ margin: '1rem' }}>
+                <AlertCircle size={18} />
+                <span>{complaintsError}</span>
+              </div>
+            ) : (
+              <ComplaintMap
+                complaints={complaints}
+                role="admin"
+                height="520px"
+                getStatusBadge={getStatusBadge}
+                getIssueBadgeColor={getIssueBadgeColor}
+                onSelectComplaint={(item) => openDetails(item.complaintId)}
+              />
+            )}
           </div>
+        ) : (
+          <>
+            {/* Complaints Table */}
+            <div className="table-responsive">
+              {loadingComplaints ? (
+                <div className="empty-state">
+                  <RefreshCw size={32} className="spin-icon" color="#3b82f6" />
+                  <p>Loading complaints from database...</p>
+                </div>
+              ) : complaintsError ? (
+                <div className="error-alert" style={{ margin: '1.5rem' }}>
+                  <AlertCircle size={18} />
+                  <span>{complaintsError}</span>
+                </div>
+              ) : complaints.length === 0 ? (
+                <div className="empty-state">
+                  <AlertCircle size={40} color="#475569" />
+                  <p>No complaints matched your search and filter criteria.</p>
+                  <button className="btn btn-secondary btn-sm" onClick={handleResetFilters}>
+                    Clear Filters
+                  </button>
+                </div>
+              ) : (
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Complaint ID</th>
+                      <th>Issue & Confidence</th>
+                      <th>Status</th>
+                      <th>Reporter</th>
+                      <th>Location / Landmark</th>
+                      <th>Date</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {complaints.map((item) => (
+                      <tr key={item.complaintId} className="admin-table-row">
+                        <td>
+                          <span className="complaint-id-badge">{item.complaintId}</span>
+                        </td>
+                        <td>
+                          <div className="table-issue-cell">
+                            <span
+                              className="issue-tag"
+                              style={{
+                                backgroundColor: `${getIssueBadgeColor(item.issueType)}20`,
+                                color: getIssueBadgeColor(item.issueType),
+                                borderColor: `${getIssueBadgeColor(item.issueType)}40`,
+                              }}
+                            >
+                              {item.issueType?.toUpperCase()}
+                            </span>
+                            <span className="conf-score">
+                              {(item.confidence * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        </td>
+                        <td>{getStatusBadge(item.status)}</td>
+                        <td>
+                          <div className="table-user-cell">
+                            <span className="reporter-name">{item.user?.name || item.userId?.name || 'Citizen'}</span>
+                            <span className="reporter-email">{item.user?.email || item.userId?.email || 'N/A'}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <span className="table-address" title={item.location?.address || 'No address'}>
+                            {item.location?.address || (item.latitude && `${item.latitude.toFixed(3)}, ${item.longitude.toFixed(3)}`) || 'No GPS'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="table-date">{new Date(item.createdAt).toLocaleDateString()}</span>
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-secondary btn-sm table-action-btn"
+                            onClick={() => openDetails(item.complaintId)}
+                          >
+                            <Eye size={13} /> Inspect
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Pagination Bar */}
+            {!loadingComplaints && complaints.length > 0 && (
+              <div className="pagination-bar">
+                <div className="pagination-info">
+                  Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
+                  {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
+                  <strong>{pagination.total}</strong> complaints
+                </div>
+                <div className="pagination-controls">
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => handlePageChange(pagination.page - 1)}
+                    disabled={pagination.page <= 1}
+                  >
+                    <ChevronLeft size={16} /> Previous
+                  </button>
+                  <span className="page-indicator">
+                    Page {pagination.page} of {pagination.totalPages}
+                  </span>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => handlePageChange(pagination.page + 1)}
+                    disabled={pagination.page >= pagination.totalPages}
+                  >
+                    Next <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </section>
 
