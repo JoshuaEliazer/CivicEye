@@ -48,13 +48,18 @@ CivicEye is an end-to-end full-stack Machine Learning application that enables c
 
 ---
 
-## Phase 1 Status
+## Phase Status
 
-Phase 1 provides the foundational architecture and verifies that:
-- The React + Vite frontend starts cleanly.
-- The Node.js + Express backend connects to MongoDB and serves health endpoints.
-- The Python FastAPI ML service loads the Ultralytics YOLO26n model (`yolo26n.pt`) and exposes health status.
-- All services run independently with strict separation of concerns.
+- **Phase 1**: Project Setup & Foundation
+- **Phase 2**: MongoDB & Backend Models
+- **Phase 3**: YOLO26 Dataset & Pipeline
+- **Phase 4**: FastAPI ML Service
+- **Phase 5**: Express ↔ FastAPI ML Integration
+- **Phase 6**: Authentication & Session Management
+- **Phase 7**: Civic Complaint Reporting & Persistence
+- **Phase 8**: Municipal Admin Dashboard & Triage
+- **Phase 9**: Maps, Geolocation & Civic Issue Visualization
+- **Phase 10**: User Dashboard & Complaint History (Completed — see [docs/dashboard.md](docs/dashboard.md))
 
 ---
 

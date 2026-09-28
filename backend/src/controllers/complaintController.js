@@ -158,9 +158,34 @@ export const getMyComplaints = async (req, res, next) => {
     const userId = req.user._id;
 
     // Filter strictly by authenticated user's ID
-    const complaints = await Complaint.find({
+    const query = {
       $or: [{ user: userId }, { userId: userId }],
-    }).sort({ createdAt: -1 });
+    };
+
+    // Optional query filters for citizen dashboard
+    if (req.query.status) {
+      query.status = req.query.status.toLowerCase().trim();
+    }
+
+    if (req.query.issueType) {
+      query.issueType = req.query.issueType.toLowerCase().trim();
+    }
+
+    if (req.query.search && typeof req.query.search === 'string' && req.query.search.trim()) {
+      const sanitized = req.query.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(sanitized, 'i');
+      query.$and = [
+        {
+          $or: [
+            { complaintId: searchRegex },
+            { description: searchRegex },
+            { 'location.address': searchRegex },
+          ],
+        },
+      ];
+    }
+
+    const complaints = await Complaint.find(query).sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
@@ -191,9 +216,10 @@ export const getComplaintById = async (req, res, next) => {
     }
 
     // Verify ownership or ADMIN authorization
-    const isOwner =
-      (complaint.user && complaint.user.toString() === req.user._id.toString()) ||
-      (complaint.userId && complaint.userId.toString() === req.user._id.toString());
+    const complaintOwnerId =
+      (complaint.user && (complaint.user._id ? complaint.user._id.toString() : complaint.user.toString())) ||
+      (complaint.userId && (complaint.userId._id ? complaint.userId._id.toString() : complaint.userId.toString()));
+    const isOwner = complaintOwnerId === req.user._id.toString();
     const isAdmin = req.user.role === 'ADMIN';
 
     if (!isOwner && !isAdmin) {

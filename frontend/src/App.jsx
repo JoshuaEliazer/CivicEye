@@ -30,10 +30,12 @@ import {
   ChevronDown,
   ChevronUp,
   Map as MapIcon,
+  LayoutDashboard,
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import './App.css';
 import AdminDashboard from './components/AdminDashboard.jsx';
+import UserDashboard from './components/UserDashboard.jsx';
 import LocationPicker from './components/LocationPicker.jsx';
 import ComplaintMap from './components/ComplaintMap.jsx';
 
@@ -67,14 +69,17 @@ function App() {
   const [authSuccess, setAuthSuccess] = useState(null);
   const [protectedTestResult, setProtectedTestResult] = useState(null);
 
-  // View Routing State (Phase 8: 'citizen' | 'admin')
-  const [currentView, setCurrentView] = useState(() =>
-    window.location.pathname.startsWith('/admin') ? 'admin' : 'citizen'
-  );
+  // View Routing State (Phase 8: 'citizen' | 'admin' | Phase 10: 'dashboard')
+  const [currentView, setCurrentView] = useState(() => {
+    const path = window.location.pathname;
+    if (path.startsWith('/admin')) return 'admin';
+    if (path.startsWith('/dashboard')) return 'dashboard';
+    return 'citizen';
+  });
 
   const navigateTo = (view) => {
     setCurrentView(view);
-    const targetPath = view === 'admin' ? '/admin' : '/';
+    const targetPath = view === 'admin' ? '/admin' : view === 'dashboard' ? '/dashboard' : '/';
     if (window.location.pathname !== targetPath) {
       window.history.pushState(null, '', targetPath);
     }
@@ -82,7 +87,14 @@ function App() {
 
   useEffect(() => {
     const handlePopState = () => {
-      setCurrentView(window.location.pathname.startsWith('/admin') ? 'admin' : 'citizen');
+      const path = window.location.pathname;
+      if (path.startsWith('/admin')) {
+        setCurrentView('admin');
+      } else if (path.startsWith('/dashboard')) {
+        setCurrentView('dashboard');
+      } else {
+        setCurrentView('citizen');
+      }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -467,22 +479,34 @@ function App() {
         </div>
 
         <div className="header-actions">
-          {currentUser?.role === 'ADMIN' && (
-            <div className="view-switcher-group">
-              <button
-                className={`view-switch-btn ${currentView === 'citizen' ? 'active' : ''}`}
-                onClick={() => navigateTo('citizen')}
-              >
-                <User size={13} /> Citizen
-              </button>
+          <div className="view-switcher-group">
+            <button
+              className={`view-switch-btn ${currentView === 'citizen' ? 'active' : ''}`}
+              onClick={() => navigateTo('citizen')}
+              title="Report an Issue"
+            >
+              <FileText size={13} /> Report Issue
+            </button>
+            <button
+              className={`view-switch-btn ${currentView === 'dashboard' ? 'active' : ''}`}
+              onClick={() => navigateTo('dashboard')}
+              title="Citizen Dashboard & Complaint History"
+            >
+              <LayoutDashboard size={13} /> My Dashboard
+              {currentUser && myComplaints.length > 0 && (
+                <span className="nav-badge">{myComplaints.length}</span>
+              )}
+            </button>
+            {currentUser?.role === 'ADMIN' && (
               <button
                 className={`view-switch-btn ${currentView === 'admin' ? 'active' : ''}`}
                 onClick={() => navigateTo('admin')}
+                title="Municipal Admin Portal"
               >
                 <Shield size={13} /> Admin
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
           {currentUser ? (
             <div className="user-badge-group">
@@ -509,7 +533,7 @@ function App() {
         </div>
       </header>
 
-      {/* View Branching: Admin Dashboard (Phase 8) vs Citizen Portal */}
+      {/* View Branching: Admin Dashboard (Phase 8) vs User Dashboard (Phase 10) vs Citizen Portal */}
       {currentView === 'admin' ? (
         <AdminDashboard
           BACKEND_URL={BACKEND_URL}
@@ -519,6 +543,57 @@ function App() {
           getIssueBadgeColor={getIssueBadgeColor}
           onNavigateToCitizen={() => navigateTo('citizen')}
         />
+      ) : currentView === 'dashboard' ? (
+        currentUser ? (
+          <UserDashboard
+            BACKEND_URL={BACKEND_URL}
+            authToken={authToken}
+            currentUser={currentUser}
+            getStatusBadge={getStatusBadge}
+            getIssueBadgeColor={getIssueBadgeColor}
+            onNavigateToReport={() => navigateTo('citizen')}
+          />
+        ) : (
+          <div
+            className="glass-panel"
+            style={{
+              padding: '3.5rem 2rem',
+              textAlign: 'center',
+              maxWidth: '600px',
+              margin: '2rem auto',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+            }}
+          >
+            <Lock size={44} color="#60a5fa" style={{ marginBottom: '1rem' }} />
+            <h3 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+              Authentication Required
+            </h3>
+            <p
+              style={{
+                color: 'var(--text-secondary)',
+                marginBottom: '1.5rem',
+                lineHeight: 1.5,
+                maxWidth: '450px',
+              }}
+            >
+              Please sign in or create a citizen account to access your personal civic complaints dashboard and track report resolutions.
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                navigateTo('citizen');
+                setTimeout(() => {
+                  document.querySelector('.auth-panel')?.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              }}
+            >
+              <KeyRound size={15} /> Sign In / Register
+            </button>
+          </div>
+        )
       ) : (
         <>
           {/* Hero */}
@@ -747,7 +822,7 @@ function App() {
               )}
 
               {complaintSuccess && (
-                <div className="auth-alert success" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                <div className="auth-alert success" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <CheckCircle2 size={18} />
                     <strong>Complaint Filed Successfully!</strong>
@@ -756,6 +831,14 @@ function App() {
                     Tracking ID: <code style={{ color: '#fff', background: 'rgba(0,0,0,0.4)', padding: '2px 6px', borderRadius: '4px' }}>{complaintSuccess.complaintId}</code>
                     &nbsp;&bull; Classified as: <strong>{complaintSuccess.issueType.toUpperCase()}</strong> ({(complaintSuccess.confidence * 100).toFixed(1)}%)
                   </p>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginTop: '0.25rem' }}
+                    onClick={() => navigateTo('dashboard')}
+                  >
+                    <LayoutDashboard size={13} /> View in My Dashboard
+                  </button>
                 </div>
               )}
 
