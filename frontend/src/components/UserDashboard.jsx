@@ -88,6 +88,34 @@ export default function UserDashboard({
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState(null);
   const [imageLoadError, setImageLoadError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  // Helper to build authenticated image URL
+  const getComplaintImageUrl = (complaint) => {
+    if (!complaint) return null;
+    const rawUrl = complaint.image?.url || complaint.imageUrl;
+
+    if (rawUrl && typeof rawUrl === 'string' && rawUrl.startsWith('/api/')) {
+      const apiBase = (BACKEND_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
+      const fullUrl = `${apiBase}${rawUrl}`;
+      return authToken ? `${fullUrl}?token=${encodeURIComponent(authToken)}` : fullUrl;
+    }
+
+    if (rawUrl && typeof rawUrl === 'string' && (rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
+      if (authToken && rawUrl.includes('/api/complaints/') && !rawUrl.includes('token=')) {
+        const sep = rawUrl.includes('?') ? '&' : '?';
+        return `${rawUrl}${sep}token=${encodeURIComponent(authToken)}`;
+      }
+      return rawUrl;
+    }
+
+    if (complaint.complaintId && (complaint.image?.filename || complaint.image?.storageKey || complaint.image?.path || complaint.image?.url)) {
+      const baseUrl = (BACKEND_URL || 'http://localhost:5000/api');
+      return `${baseUrl}/complaints/${complaint.complaintId}/image?token=${encodeURIComponent(authToken || '')}`;
+    }
+
+    return null;
+  };
 
   // Fetch complaints belonging to authenticated user
   const fetchComplaints = async () => {
@@ -193,6 +221,7 @@ export default function UserDashboard({
     setLoadingDetail(true);
     setDetailError(null);
     setImageLoadError(false);
+    setImageLoading(true);
     setSelectedComplaint(null);
 
     try {
@@ -682,31 +711,58 @@ export default function UserDashboard({
                   {/* Left Column: Evidence Photo, Description & Mini Map */}
                   <div className="detail-col-left">
                     <div className="modal-section-title">Evidence Photo</div>
-                    {/* Safe image display with error fallback */}
-                    {selectedComplaint.imageUrl || selectedComplaint.image?.path ? (
-                      <div className="detail-evidence-container">
-                        {!imageLoadError ? (
-                          <img
-                            src={selectedComplaint.imageUrl || selectedComplaint.image?.path}
-                            alt={`Evidence for complaint ${selectedComplaint.complaintId}`}
-                            className="detail-evidence-img"
-                            onError={() => setImageLoadError(true)}
-                          />
-                        ) : (
+                    {/* Safe image display with authenticated URL and error fallback */}
+                    {(() => {
+                      const imgUrl = getComplaintImageUrl(selectedComplaint);
+                      if (!imgUrl) {
+                        return (
                           <div className="detail-no-img">
                             <ImageIcon size={32} color="#64748b" />
                             <span>Image not available</span>
-                            <span className="no-img-subtext">The evidence photo could not be rendered</span>
+                            <span className="no-img-subtext">No evidence photo was attached to this report</span>
                           </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="detail-no-img">
-                        <ImageIcon size={32} color="#64748b" />
-                        <span>Image not available</span>
-                        <span className="no-img-subtext">No evidence photo was attached to this report</span>
-                      </div>
-                    )}
+                        );
+                      }
+
+                      return (
+                        <div className="detail-evidence-container" style={{ position: 'relative' }}>
+                          {imageLoading && !imageLoadError && (
+                            <div
+                              className="detail-img-loading"
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                height: '180px',
+                                color: '#94a3b8',
+                                fontSize: '0.85rem',
+                              }}
+                            >
+                              <span>Loading image...</span>
+                            </div>
+                          )}
+                          {!imageLoadError ? (
+                            <img
+                              src={imgUrl}
+                              alt={`Evidence for complaint ${selectedComplaint.complaintId}`}
+                              className="detail-evidence-img"
+                              style={{ display: imageLoading ? 'none' : 'block' }}
+                              onLoad={() => setImageLoading(false)}
+                              onError={() => {
+                                setImageLoading(false);
+                                setImageLoadError(true);
+                              }}
+                            />
+                          ) : (
+                            <div className="detail-no-img">
+                              <ImageIcon size={32} color="#64748b" />
+                              <span>Image not available</span>
+                              <span className="no-img-subtext">The evidence photo could not be rendered</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     <div className="detail-field-box" style={{ marginTop: '1rem' }}>
                       <label className="detail-label">Problem Description</label>

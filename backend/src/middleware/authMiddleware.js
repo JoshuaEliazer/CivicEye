@@ -13,6 +13,8 @@ export const protect = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.split(' ')[1]?.trim();
+  } else if (req.query && req.query.token) {
+    token = String(req.query.token).trim();
   }
 
   if (!token) {

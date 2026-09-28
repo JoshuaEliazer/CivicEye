@@ -70,6 +70,36 @@ export default function AdminDashboard({
   const [newStatus, setNewStatus] = useState('in_progress');
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [statusMessage, setStatusMessage] = useState(null);
+  const [adminImageLoadError, setAdminImageLoadError] = useState(false);
+  const [adminImageLoading, setAdminImageLoading] = useState(true);
+
+  // Helper to build authenticated image URL
+  const getComplaintImageUrl = (complaint) => {
+    if (!complaint) return null;
+    const rawUrl = complaint.image?.url || complaint.imageUrl;
+
+    if (rawUrl && typeof rawUrl === 'string' && rawUrl.startsWith('/api/')) {
+      const apiBase = (BACKEND_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
+      const fullUrl = `${apiBase}${rawUrl}`;
+      return authToken ? `${fullUrl}?token=${encodeURIComponent(authToken)}` : fullUrl;
+    }
+
+    if (rawUrl && typeof rawUrl === 'string' && (rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
+      if (authToken && rawUrl.includes('/api/complaints/') && !rawUrl.includes('token=')) {
+        const sep = rawUrl.includes('?') ? '&' : '?';
+        return `${rawUrl}${sep}token=${encodeURIComponent(authToken)}`;
+      }
+      return rawUrl;
+    }
+
+    if (complaint.complaintId && (complaint.image?.filename || complaint.image?.storageKey || complaint.image?.path || complaint.image?.url)) {
+      const baseUrl = (BACKEND_URL || 'http://localhost:5000/api');
+      return `${baseUrl}/complaints/${complaint.complaintId}/image?token=${encodeURIComponent(authToken || '')}`;
+    }
+
+    return null;
+  };
+
 
   const authHeaders = {
     headers: { Authorization: `Bearer ${authToken}` },
@@ -163,6 +193,8 @@ export default function AdminDashboard({
   const openDetails = async (complaintId) => {
     setLoadingDetails(true);
     setStatusMessage(null);
+    setAdminImageLoadError(false);
+    setAdminImageLoading(true);
     try {
       const res = await axios.get(`${BACKEND_URL}/admin/complaints/${complaintId}`, {
         ...authHeaders,
@@ -607,17 +639,47 @@ export default function AdminDashboard({
               {/* Left Column: Evidence & Location */}
               <div className="modal-col">
                 <div className="modal-section-title">Evidence Photo & Description</div>
-                {selectedComplaint.imageUrl || selectedComplaint.image?.path ? (
-                  <div className="modal-img-container">
-                    <img
-                      src={selectedComplaint.imageUrl || selectedComplaint.image?.path}
-                      alt="Complaint Evidence"
-                      className="modal-evidence-img"
-                    />
-                  </div>
-                ) : (
-                  <div className="modal-no-img">No Image Available</div>
-                )}
+                {(() => {
+                  const imgUrl = getComplaintImageUrl(selectedComplaint);
+                  if (!imgUrl) {
+                    return <div className="modal-no-img">No Image Available</div>;
+                  }
+
+                  return (
+                    <div className="modal-img-container" style={{ position: 'relative' }}>
+                      {adminImageLoading && !adminImageLoadError && (
+                        <div
+                          className="modal-img-loading"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            height: '180px',
+                            color: '#94a3b8',
+                            fontSize: '0.85rem',
+                          }}
+                        >
+                          <span>Loading image...</span>
+                        </div>
+                      )}
+                      {!adminImageLoadError ? (
+                        <img
+                          src={imgUrl}
+                          alt="Complaint Evidence"
+                          className="modal-evidence-img"
+                          style={{ display: adminImageLoading ? 'none' : 'block' }}
+                          onLoad={() => setAdminImageLoading(false)}
+                          onError={() => {
+                            setAdminImageLoading(false);
+                            setAdminImageLoadError(true);
+                          }}
+                        />
+                      ) : (
+                        <div className="modal-no-img">No Image Available (Failed to Load)</div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <div className="detail-field-box" style={{ marginTop: '1rem' }}>
                   <label>Problem Description</label>

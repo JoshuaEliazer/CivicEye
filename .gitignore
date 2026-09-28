@@ -48,6 +48,7 @@ runs/
 
 # Uploads & Temp
 uploads/
+backend/uploads/
 scratch/
 temp/
 

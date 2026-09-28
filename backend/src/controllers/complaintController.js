@@ -1,6 +1,11 @@
 import Complaint from '../models/Complaint.js';
 import { generateComplaintId } from '../utils/idGenerator.js';
 import { predictCivicIssue, MLServiceError } from '../services/mlService.js';
+import storageService, {
+  StorageError,
+  StorageFileNotFoundError,
+  PathTraversalError,
+} from '../services/storage/index.js';
 
 /**
  * Submit a new civic complaint with image and run YOLO26 ML inference.
@@ -8,6 +13,8 @@ import { predictCivicIssue, MLServiceError } from '../services/mlService.js';
  * Access: Protected (Requires Bearer token)
  */
 export const createComplaint = async (req, res, next) => {
+  let storedImage = null;
+
   try {
     // 1. Validate image upload
     if (!req.file) {
@@ -80,16 +87,49 @@ export const createComplaint = async (req, res, next) => {
       }
     }
 
-    // 5. Send image through existing FastAPI YOLO26 ML Service
-    const mlResult = await predictCivicIssue(
-      req.file.buffer,
-      req.file.originalname,
-      req.file.mimetype,
-      confidenceOverride
-    );
-
-    // 6. Generate unique human-readable Complaint ID
+    // 5. Generate unique human-readable Complaint ID first
     const complaintId = await generateComplaintId();
+
+    // 6. Save image safely through storage abstraction
+    try {
+      storedImage = await storageService.saveImage({
+        buffer: req.file.buffer,
+        originalName: req.file.originalname,
+        mimetype: req.file.mimetype,
+        complaintId,
+        subDir: 'complaints',
+      });
+    } catch (storageErr) {
+      return res.status(storageErr.statusCode || 400).json({
+        success: false,
+        message: `Image storage failed: ${storageErr.message}`,
+        error: storageErr.code || 'STORAGE_ERROR',
+      });
+    }
+
+    // 7. Send image through existing FastAPI YOLO26 ML Service
+    let mlResult;
+    try {
+      mlResult = await predictCivicIssue(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype,
+        confidenceOverride
+      );
+    } catch (mlErr) {
+      // Rollback stored image if ML inference fails
+      if (storedImage?.storageKey) {
+        await storageService.deleteImage(storedImage.storageKey).catch(() => {});
+      }
+      if (mlErr instanceof MLServiceError) {
+        return res.status(mlErr.statusCode).json({
+          success: false,
+          message: `Inference failed: ${mlErr.message}`,
+          error: mlErr.code,
+        });
+      }
+      throw mlErr;
+    }
 
     // Map ML issue to schema-supported issueType
     let issueType = 'unknown';
@@ -97,7 +137,8 @@ export const createComplaint = async (req, res, next) => {
       issueType = mlResult.issue.toLowerCase();
     }
 
-    // 7. Persist Complaint to MongoDB
+    // 8. Persist Complaint to MongoDB with storage metadata
+    const imageUrl = `/api/complaints/${complaintId}/image`;
     const newComplaint = new Complaint({
       complaintId,
       user: req.user._id,
@@ -111,12 +152,16 @@ export const createComplaint = async (req, res, next) => {
       isCustomModel: Boolean(mlResult.model?.isCustomModel),
       detections: mlResult.detections || [],
       image: {
-        originalName: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-        path: req.file.originalname,
+        filename: storedImage.filename,
+        originalName: storedImage.originalName,
+        mimetype: storedImage.mimetype,
+        size: storedImage.size,
+        storageType: storedImage.storageType || 'local',
+        storageKey: storedImage.storageKey,
+        path: storedImage.path,
+        url: imageUrl,
       },
-      imageUrl: req.file.originalname,
+      imageUrl,
       location: {
         latitude: parsedLat,
         longitude: parsedLng,
@@ -127,15 +172,29 @@ export const createComplaint = async (req, res, next) => {
       status: 'submitted',
     });
 
-    const savedComplaint = await newComplaint.save();
+    let savedComplaint;
+    try {
+      savedComplaint = await newComplaint.save();
+    } catch (dbErr) {
+      // Rollback: delete stored image file on DB persistence failure
+      if (storedImage?.storageKey) {
+        await storageService.deleteImage(storedImage.storageKey).catch(() => {});
+      }
+      throw dbErr;
+    }
 
-    // 8. Return created complaint information
+    // 9. Return created complaint information
     return res.status(201).json({
       success: true,
       message: 'Civic complaint submitted successfully.',
       complaint: savedComplaint,
     });
   } catch (err) {
+    // Cleanup stored file in case of any unhandled error during creation
+    if (storedImage?.storageKey) {
+      await storageService.deleteImage(storedImage.storageKey).catch(() => {});
+    }
+
     if (err instanceof MLServiceError) {
       return res.status(err.statusCode).json({
         success: false,
@@ -239,8 +298,96 @@ export const getComplaintById = async (req, res, next) => {
   }
 };
 
+/**
+ * Retrieve stored complaint image with role-based and ownership authorization.
+ * Route: GET /api/complaints/:complaintId/image
+ * Access: Protected (Requires Bearer token or ?token=)
+ */
+export const getComplaintImage = async (req, res, next) => {
+  try {
+    const { complaintId } = req.params;
+
+    const complaint = await Complaint.findOne({ complaintId });
+    if (!complaint) {
+      return res.status(404).json({
+        success: false,
+        message: `Complaint with ID '${complaintId}' was not found.`,
+        error: 'COMPLAINT_NOT_FOUND',
+      });
+    }
+
+    // Verify ownership or ADMIN authorization
+    const complaintOwnerId =
+      (complaint.user && (complaint.user._id ? complaint.user._id.toString() : complaint.user.toString())) ||
+      (complaint.userId && (complaint.userId._id ? complaint.userId._id.toString() : complaint.userId.toString()));
+    const isOwner = complaintOwnerId === req.user._id.toString();
+    const isAdmin = req.user.role === 'ADMIN';
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You are not authorized to access this complaint image.',
+        error: 'FORBIDDEN',
+      });
+    }
+
+    // Check if complaint has image reference
+    const storageKey =
+      complaint.image?.storageKey ||
+      (complaint.image?.filename ? `complaints/${complaint.image.filename}` : null) ||
+      complaint.image?.path;
+
+    if (!storageKey) {
+      return res.status(404).json({
+        success: false,
+        message: `No stored image reference found for complaint '${complaintId}'.`,
+        error: 'IMAGE_NOT_FOUND',
+      });
+    }
+
+    try {
+      const { stream, size } = await storageService.getImageStream(storageKey);
+      const mime = complaint.image?.mimetype || 'image/jpeg';
+
+      res.setHeader('Content-Type', mime);
+      if (size) res.setHeader('Content-Length', size);
+      res.setHeader('Cache-Control', 'private, max-age=86400');
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="${complaint.image?.filename || `${complaintId}.jpg`}"`
+      );
+
+      return stream.pipe(res);
+    } catch (err) {
+      if (err instanceof StorageFileNotFoundError) {
+        return res.status(404).json({
+          success: false,
+          message: 'Physical image file was not found on the storage server.',
+          error: 'IMAGE_FILE_NOT_FOUND',
+        });
+      }
+      if (err instanceof PathTraversalError) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid image key: path traversal sequence detected.',
+          error: 'PATH_TRAVERSAL_DETECTED',
+        });
+      }
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to stream complaint image.',
+        error: 'STORAGE_RETRIEVAL_ERROR',
+      });
+    }
+  } catch (err) {
+    return next(err);
+  }
+};
+
 export default {
   createComplaint,
   getMyComplaints,
   getComplaintById,
+  getComplaintImage,
 };
+

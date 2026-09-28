@@ -60,6 +60,8 @@ CivicEye is an end-to-end full-stack Machine Learning application that enables c
 - **Phase 8**: Municipal Admin Dashboard & Triage
 - **Phase 9**: Maps, Geolocation & Civic Issue Visualization
 - **Phase 10**: User Dashboard & Complaint History (Completed — see [docs/dashboard.md](docs/dashboard.md))
+- **Phase 11**: Image Storage & Media Management (Completed — see [docs/image-storage.md](docs/image-storage.md))
+
 
 ---
 

@@ -529,6 +529,15 @@ const runLocationTests = async () => {
     // CLEANUP: Clean up test accounts and complaints
     // ------------------------------------------------------------------------
     console.log('\n[*] Cleaning up test database records...');
+    const complaintsToDelete = await Complaint.find({ complaintId: { $in: createdComplaintIds } });
+    for (const c of complaintsToDelete) {
+      if (c.image?.storageKey) {
+        try {
+          const p = path.resolve('uploads', c.image.storageKey);
+          if (fs.existsSync(p)) fs.unlinkSync(p);
+        } catch (_) {}
+      }
+    }
     await Complaint.deleteMany({ complaintId: { $in: createdComplaintIds } });
     await User.deleteMany({ email: { $in: [citizen1Email, citizen2Email, adminEmail] } });
     console.log(`[+] Removed ${createdComplaintIds.length} test complaint(s) and 3 test user(s).`);

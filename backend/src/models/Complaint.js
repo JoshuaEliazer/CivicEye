@@ -29,10 +29,14 @@ const detectionSchema = new mongoose.Schema(
 
 const imageMetaSchema = new mongoose.Schema(
   {
+    filename: { type: String, trim: true },
     originalName: { type: String, trim: true },
     mimetype: { type: String, trim: true },
     size: { type: Number },
+    storageType: { type: String, trim: true, default: 'local' },
+    storageKey: { type: String, trim: true },
     path: { type: String, trim: true },
+    url: { type: String, trim: true },
   },
   { _id: false }
 );
@@ -226,9 +230,15 @@ complaintSchema.pre('validate', function (next) {
     this.longitude = this.location.longitude;
   }
 
-  // Ensure imageUrl is populated if image.originalName exists
-  if (!this.imageUrl && this.image?.originalName) {
-    this.imageUrl = this.image.originalName;
+  // Ensure imageUrl is populated if image reference exists
+  if (!this.imageUrl) {
+    if (this.image?.url) {
+      this.imageUrl = this.image.url;
+    } else if (this.image?.path) {
+      this.imageUrl = this.image.path;
+    } else if (this.image?.originalName) {
+      this.imageUrl = this.image.originalName;
+    }
   }
 
   next();

@@ -3,6 +3,7 @@ import {
   createComplaint,
   getMyComplaints,
   getComplaintById,
+  getComplaintImage,
 } from '../controllers/complaintController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { uploadSingleImage } from '../middleware/uploadMiddleware.js';
@@ -30,4 +31,12 @@ router.get('/', protect, getMyComplaints);
  */
 router.get('/:complaintId', protect, getComplaintById);
 
+/**
+ * @route   GET /api/complaints/:complaintId/image
+ * @desc    Retrieve securely stored evidence photo for a complaint
+ * @access  Protected (Requires Bearer token or ?token= query parameter)
+ */
+router.get('/:complaintId/image', protect, getComplaintImage);
+
 export default router;
+

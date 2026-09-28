@@ -466,11 +466,22 @@ const runComplaintTests = async () => {
       if (count !== 1) throw new Error('Complaint document not found in MongoDB');
 
       // Cleanup
+      const complaintsToDelete = await Complaint.find({
+        $or: [{ user: user1Id }, { user: user2Id }, { complaintId: createdComplaintId }],
+      });
+      for (const c of complaintsToDelete) {
+        if (c.image?.storageKey) {
+          try {
+            const p = path.resolve('uploads', c.image.storageKey);
+            if (fs.existsSync(p)) fs.unlinkSync(p);
+          } catch (_) {}
+        }
+      }
       await Complaint.deleteMany({
         $or: [{ user: user1Id }, { user: user2Id }, { complaintId: createdComplaintId }],
       });
       await User.deleteMany({ email: { $in: [user1Email, user2Email] } });
-      console.log('[+] Test data cleaned up successfully.');
+      console.log('[+] Test data and image files cleaned up successfully.');
 
       console.log('[+] PASS: Persistence verified and test records cleaned up.');
       passed++;
