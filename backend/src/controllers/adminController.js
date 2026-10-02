@@ -1,4 +1,5 @@
 import Complaint from '../models/Complaint.js';
+import notificationService from '../services/notificationService.js';
 
 // Allowed statuses and issue types for strict query and update validation
 const ALLOWED_STATUSES = [
@@ -179,8 +180,22 @@ export const updateComplaintStatus = async (req, res, next) => {
       });
     }
 
+    const oldStatus = complaint.status;
     complaint.status = normalizedStatus;
     const updatedComplaint = await complaint.save();
+
+    // 3. Trigger notification for status change (only when status actually changed)
+    if (oldStatus !== normalizedStatus) {
+      try {
+        await notificationService.notifyComplaintStatusChanged(
+          updatedComplaint,
+          oldStatus,
+          normalizedStatus
+        );
+      } catch (notifyErr) {
+        console.error('[Notification] Failed to create status update notification:', notifyErr.message);
+      }
+    }
 
     // Populate user reference for the response
     await updatedComplaint.populate('user', 'name email role createdAt');

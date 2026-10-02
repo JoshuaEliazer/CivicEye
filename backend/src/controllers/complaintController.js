@@ -6,6 +6,7 @@ import storageService, {
   StorageFileNotFoundError,
   PathTraversalError,
 } from '../services/storage/index.js';
+import notificationService from '../services/notificationService.js';
 
 /**
  * Submit a new civic complaint with image and run YOLO26 ML inference.
@@ -183,7 +184,14 @@ export const createComplaint = async (req, res, next) => {
       throw dbErr;
     }
 
-    // 9. Return created complaint information
+    // 9. Trigger in-app notification for complaint submission
+    try {
+      await notificationService.notifyComplaintSubmitted(savedComplaint, req.user);
+    } catch (notifyErr) {
+      console.error('[Notification] Failed to create submission notification:', notifyErr.message);
+    }
+
+    // 10. Return created complaint information
     return res.status(201).json({
       success: true,
       message: 'Civic complaint submitted successfully.',

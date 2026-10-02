@@ -38,6 +38,7 @@ import AdminDashboard from './components/AdminDashboard.jsx';
 import UserDashboard from './components/UserDashboard.jsx';
 import LocationPicker from './components/LocationPicker.jsx';
 import ComplaintMap from './components/ComplaintMap.jsx';
+import NotificationPanel from './components/NotificationPanel.jsx';
 
 // Express Backend REST API URL - All client communication routes through here
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -77,11 +78,22 @@ function App() {
     return 'citizen';
   });
 
+  // Phase 12: Notification & Complaint Navigation State
+  const [dashboardInitialComplaintId, setDashboardInitialComplaintId] = useState(null);
+  const [notificationRefreshKey, setNotificationRefreshKey] = useState(0);
+
   const navigateTo = (view) => {
     setCurrentView(view);
     const targetPath = view === 'admin' ? '/admin' : view === 'dashboard' ? '/dashboard' : '/';
     if (window.location.pathname !== targetPath) {
       window.history.pushState(null, '', targetPath);
+    }
+  };
+
+  const handleSelectComplaintFromNotification = (complaintId) => {
+    if (complaintId) {
+      setDashboardInitialComplaintId(complaintId);
+      navigateTo('dashboard');
     }
   };
 
@@ -365,6 +377,7 @@ function App() {
       setComplaintAddress('');
       if (complaintFileRef.current) complaintFileRef.current.value = '';
       fetchMyComplaints();
+      setNotificationRefreshKey((k) => k + 1);
     } catch (err) {
       setComplaintError(
         err.response?.data?.message || err.message || 'Failed to submit civic complaint.'
@@ -508,6 +521,16 @@ function App() {
             )}
           </div>
 
+          {currentUser && (
+            <NotificationPanel
+              BACKEND_URL={BACKEND_URL}
+              authToken={authToken}
+              currentUser={currentUser}
+              onSelectComplaint={handleSelectComplaintFromNotification}
+              refreshTrigger={notificationRefreshKey}
+            />
+          )}
+
           {currentUser ? (
             <div className="user-badge-group">
               <div className="user-pill">
@@ -552,6 +575,8 @@ function App() {
             getStatusBadge={getStatusBadge}
             getIssueBadgeColor={getIssueBadgeColor}
             onNavigateToReport={() => navigateTo('citizen')}
+            initialComplaintId={dashboardInitialComplaintId}
+            onClearInitialComplaintId={() => setDashboardInitialComplaintId(null)}
           />
         ) : (
           <div

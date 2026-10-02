@@ -72,6 +72,8 @@ export default function UserDashboard({
   getStatusBadge,
   getIssueBadgeColor,
   onNavigateToReport,
+  initialComplaintId,
+  onClearInitialComplaintId,
 }) {
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -244,6 +246,16 @@ export default function UserDashboard({
       setLoadingDetail(false);
     }
   };
+
+  // Open complaint detail automatically if initialComplaintId is passed (e.g. from notification click)
+  useEffect(() => {
+    if (initialComplaintId && authToken) {
+      handleOpenDetail(initialComplaintId);
+      if (onClearInitialComplaintId) {
+        onClearInitialComplaintId();
+      }
+    }
+  }, [initialComplaintId, authToken]);
 
   // Safe color resolver for issue badges
   const resolveIssueColor = (issue) => {
