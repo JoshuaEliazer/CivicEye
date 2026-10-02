@@ -201,11 +201,22 @@ const complaintSchema = new mongoose.Schema(
       },
       default: 'MEDIUM',
     },
+    // Dedicated resolution timestamp (Phase 13)
+    resolvedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+// Indexes for analytics aggregations and reverse-chronological sorting
+complaintSchema.index({ createdAt: -1 });
+complaintSchema.index({ status: 1, createdAt: -1 });
+complaintSchema.index({ issueType: 1, createdAt: -1 });
 
 // Pre-validate hook to sync user and userId, and synchronize location fields
 complaintSchema.pre('validate', function (next) {

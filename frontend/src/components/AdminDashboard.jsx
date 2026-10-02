@@ -23,6 +23,7 @@ import {
   Map as MapIcon,
 } from 'lucide-react';
 import ComplaintMap from './ComplaintMap.jsx';
+import AdminAnalytics from './AdminAnalytics.jsx';
 
 export default function AdminDashboard({
   BACKEND_URL,
@@ -405,79 +406,99 @@ export default function AdminDashboard({
             >
               <MapIcon size={13} /> Geospatial Map
             </button>
-          </div>
-        </div>
-
-        {/* Search & Filter Toolbar */}
-        <div className="admin-toolbar">
-          <form onSubmit={handleSearchSubmit} className="search-form">
-            <div className="input-with-icon search-box">
-              <Search size={16} className="input-icon" />
-              <input
-                type="text"
-                className="text-input"
-                placeholder="Search by ID (CE-...), address, description..."
-                value={filters.search}
-                onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-              />
-            </div>
-            <button type="submit" className="btn btn-secondary btn-sm">
-              Search
+            <button
+              type="button"
+              className={`view-toggle-btn ${adminViewMode === 'analytics' ? 'active' : ''}`}
+              onClick={() => setAdminViewMode('analytics')}
+              title="City Analytics, Trends & Insights"
+            >
+              <BarChart3 size={13} /> Analytics & Insights
             </button>
-          </form>
-
-          <div className="filters-group">
-            <div className="filter-select-wrapper">
-              <Filter size={14} className="filter-icon" />
-              <select
-                className="text-input filter-select"
-                value={filters.issueType}
-                onChange={(e) => handleFilterChange('issueType', e.target.value)}
-              >
-                <option value="">All Issue Types</option>
-                <option value="pothole">Pothole</option>
-                <option value="leakage">Leakage</option>
-                <option value="garbage">Garbage</option>
-                <option value="other">Other</option>
-                <option value="none">None / Baseline</option>
-              </select>
-            </div>
-
-            <div className="filter-select-wrapper">
-              <Filter size={14} className="filter-icon" />
-              <select
-                className="text-input filter-select"
-                value={filters.status}
-                onChange={(e) => handleFilterChange('status', e.target.value)}
-              >
-                <option value="">All Statuses</option>
-                <option value="submitted">Submitted</option>
-                <option value="under_review">Under Review</option>
-                <option value="in_progress">In Progress</option>
-                <option value="resolved">Resolved</option>
-                <option value="rejected">Rejected</option>
-              </select>
-            </div>
-
-            {(filters.search || filters.issueType || filters.status) && (
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={handleResetFilters}
-                title="Reset all filters"
-              >
-                <RotateCcw size={14} /> Reset
-              </button>
-            )}
           </div>
         </div>
 
-        {adminViewMode === 'map' ? (
-          <div style={{ padding: '1.25rem' }}>
-            {loadingComplaints ? (
-              <div className="empty-state">
-                <RefreshCw size={32} className="spin-icon" color="#3b82f6" />
-                <p>Loading complaints from database...</p>
+        {adminViewMode === 'analytics' ? (
+          <div style={{ padding: '0.5rem 1.25rem 1.25rem 1.25rem' }}>
+            <AdminAnalytics
+              BACKEND_URL={BACKEND_URL}
+              authToken={authToken}
+              currentUser={currentUser}
+              getStatusBadge={getStatusBadge}
+              getIssueBadgeColor={getIssueBadgeColor}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Search & Filter Toolbar */}
+            <div className="admin-toolbar">
+              <form onSubmit={handleSearchSubmit} className="search-form">
+                <div className="input-with-icon search-box">
+                  <Search size={16} className="input-icon" />
+                  <input
+                    type="text"
+                    className="text-input"
+                    placeholder="Search by ID (CE-...), address, description..."
+                    value={filters.search}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                  />
+                </div>
+                <button type="submit" className="btn btn-secondary btn-sm">
+                  Search
+                </button>
+              </form>
+
+              <div className="filters-group">
+                <div className="filter-select-wrapper">
+                  <Filter size={14} className="filter-icon" />
+                  <select
+                    className="text-input filter-select"
+                    value={filters.issueType}
+                    onChange={(e) => handleFilterChange('issueType', e.target.value)}
+                  >
+                    <option value="">All Issue Types</option>
+                    <option value="pothole">Pothole</option>
+                    <option value="leakage">Leakage</option>
+                    <option value="garbage">Garbage</option>
+                    <option value="other">Other</option>
+                    <option value="none">None / Baseline</option>
+                  </select>
+                </div>
+
+                <div className="filter-select-wrapper">
+                  <Filter size={14} className="filter-icon" />
+                  <select
+                    className="text-input filter-select"
+                    value={filters.status}
+                    onChange={(e) => handleFilterChange('status', e.target.value)}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="submitted">Submitted</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+
+                {(filters.search || filters.issueType || filters.status) && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleResetFilters}
+                    title="Reset all filters"
+                  >
+                    <RotateCcw size={14} /> Reset
+                  </button>
+                )}
               </div>
+            </div>
+
+            {adminViewMode === 'map' ? (
+              <div style={{ padding: '1.25rem' }}>
+                {loadingComplaints ? (
+                  <div className="empty-state">
+                    <RefreshCw size={32} className="spin-icon" color="#3b82f6" />
+                    <p>Loading complaints from database...</p>
+                  </div>
             ) : complaintsError ? (
               <div className="error-alert" style={{ margin: '1rem' }}>
                 <AlertCircle size={18} />
@@ -611,6 +632,8 @@ export default function AdminDashboard({
                 </div>
               </div>
             )}
+          </>
+        )}
           </>
         )}
       </section>

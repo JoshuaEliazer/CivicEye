@@ -182,6 +182,14 @@ export const updateComplaintStatus = async (req, res, next) => {
 
     const oldStatus = complaint.status;
     complaint.status = normalizedStatus;
+
+    // Maintain resolvedAt timestamp (Phase 13)
+    if (normalizedStatus === 'resolved' && oldStatus !== 'resolved') {
+      complaint.resolvedAt = new Date();
+    } else if (normalizedStatus !== 'resolved' && oldStatus === 'resolved') {
+      complaint.resolvedAt = null;
+    }
+
     const updatedComplaint = await complaint.save();
 
     // 3. Trigger notification for status change (only when status actually changed)
