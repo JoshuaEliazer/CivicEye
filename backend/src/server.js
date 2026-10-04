@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDB } from './config/db.js';
+import mongoose from 'mongoose';
 import healthRoutes from './routes/healthRoutes.js';
 import predictRoutes from './routes/predictRoutes.js';
 import authRoutes from './routes/authRoutes.js';
@@ -15,11 +16,24 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Resolve allowed CORS origins from environment
+const getCorsOrigin = () => {
+  if (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.trim() !== '') {
+    const origins = process.env.CORS_ORIGIN.split(',').map((o) => o.trim());
+    return origins.length === 1 ? origins[0] : origins;
+  }
+  if (process.env.FRONTEND_URL && process.env.FRONTEND_URL.trim() !== '') {
+    return process.env.FRONTEND_URL.trim();
+  }
+  return '*';
+};
+
 // Middleware
 app.use(cors({
-  origin: '*',
+  origin: getCorsOrigin(),
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -52,19 +66,25 @@ app.use((req, res, next) => {
 
 // Global Error Handler
 app.use((err, req, res, next) => {
-  console.error('[CivicEye Error]:', err.stack || err);
+  if (process.env.NODE_ENV !== 'test') {
+    console.error('[CivicEye Error]:', err.stack || err);
+  }
   const status = err.statusCode || err.status || 500;
   res.status(status).json({
     success: false,
     message: err.message || 'Internal Server Error',
-    error: err.code || (status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_ERROR')
+    error: err.code || (status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_ERROR'),
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
   });
 });
+
+// Server handle for lifecycle management
+let server = null;
 
 // Start Server and connect to DB
 const startServer = async () => {
   await connectDB();
-  app.listen(PORT, () => {
+  server = app.listen(PORT, () => {
     console.log(`[CivicEye Backend] Server running on http://localhost:${PORT}`);
     console.log(`[CivicEye Backend] Health check at http://localhost:${PORT}/api/health`);
     console.log(`[CivicEye Backend] Predict endpoint at http://localhost:${PORT}/api/predict`);
@@ -74,6 +94,28 @@ const startServer = async () => {
     console.log(`[CivicEye Backend] Admin API at http://localhost:${PORT}/api/admin`);
   });
 };
+
+// Graceful shutdown handler for Docker / SIGTERM / SIGINT
+const handleShutdown = async (signal) => {
+  console.log(`\n[CivicEye Backend] ${signal} signal received. Initiating graceful shutdown...`);
+  if (server) {
+    server.close(async () => {
+      console.log('[CivicEye Backend] HTTP server closed cleanly.');
+      try {
+        await mongoose.connection.close(false);
+        console.log('[CivicEye Backend] MongoDB connection closed.');
+      } catch (dbErr) {
+        console.error('[CivicEye Backend] Error closing MongoDB connection:', dbErr.message);
+      }
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
+};
+
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
 
 startServer();
 

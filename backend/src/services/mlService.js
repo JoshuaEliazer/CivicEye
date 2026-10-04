@@ -48,7 +48,7 @@ export const checkMlHealth = async (customTimeoutMs = 3000) => {
         online: false,
         status: 'degraded',
         message: `FastAPI responded with HTTP ${response.status}`,
-        url: ML_SERVICE_URL,
+        url: serviceUrl,
       };
     }
 

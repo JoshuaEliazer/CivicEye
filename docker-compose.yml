@@ -1,23 +1,42 @@
 version: '3.8'
 
+# ================================================================
+# CivicEye - Production Multi-Container Orchestration (Phase 14)
+# Services: Frontend (Nginx), Backend (Express), ML (FastAPI), MongoDB
+# ================================================================
+
 services:
+  # --------------------------------------------------------------
+  # 1. MongoDB Database Container
+  # --------------------------------------------------------------
   mongodb:
     image: mongo:7.0
     container_name: civiceye_mongodb
-    restart: always
+    restart: unless-stopped
     ports:
       - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=civiceye
     volumes:
       - mongodb_data:/data/db
     networks:
       - civiceye_network
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand('ping').ok\" | grep 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
+  # --------------------------------------------------------------
+  # 2. FastAPI Computer Vision ML Service Container (Ultralytics YOLO26)
+  # --------------------------------------------------------------
   ml-service:
     build:
       context: ./ml-service
       dockerfile: Dockerfile
     container_name: civiceye_ml_service
-    restart: always
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
@@ -26,43 +45,90 @@ services:
       - CONFIDENCE_THRESHOLD=0.50
     networks:
       - civiceye_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
+  # --------------------------------------------------------------
+  # 3. Node.js Express REST Backend Container
+  # --------------------------------------------------------------
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: civiceye_backend
-    restart: always
+    restart: unless-stopped
     ports:
       - "5000:5000"
     environment:
+      - NODE_ENV=production
       - PORT=5000
       - MONGODB_URI=mongodb://mongodb:27017/civiceye
       - ML_SERVICE_URL=http://ml-service:8000
+      - ML_SERVICE_TIMEOUT_MS=10000
+      - JWT_SECRET=${JWT_SECRET:-civiceye_production_super_secret_jwt_key_2026}
+      - JWT_EXPIRES_IN=7d
+      - STORAGE_TYPE=local
+      - LOCAL_STORAGE_PATH=/app/uploads
+      - CORS_ORIGIN=http://localhost:5173,http://localhost:80,http://127.0.0.1:5173,http://localhost
+    volumes:
+      - backend_uploads:/app/uploads
     depends_on:
-      - mongodb
-      - ml-service
+      mongodb:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
     networks:
       - civiceye_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
+  # --------------------------------------------------------------
+  # 4. React Vite Production Frontend Container (Nginx)
+  # --------------------------------------------------------------
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=/api
     container_name: civiceye_frontend
-    restart: always
+    restart: unless-stopped
     ports:
-      - "5173:5173"
-    environment:
-      - VITE_API_URL=http://localhost:5000/api
+      - "5173:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - civiceye_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
+# ----------------------------------------------------------------
+# Persistent Storage Volumes
+# ----------------------------------------------------------------
+volumes:
+  # Preserves MongoDB database files across container lifecycle events
+  mongodb_data:
+    driver: local
+  # Preserves citizen-uploaded civic complaint images across container recreation
+  backend_uploads:
+    driver: local
+
+# ----------------------------------------------------------------
+# Internal Isolated Network
+# ----------------------------------------------------------------
 networks:
   civiceye_network:
     driver: bridge
-
-volumes:
-  mongodb_data:
