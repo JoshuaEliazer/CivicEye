@@ -7,9 +7,10 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node test/securityTest.js && node test/performanceTest.js",
+    "test": "node test/securityTest.js && node test/performanceTest.js && node test/finalE2ETest.js",
     "test:security": "node test/securityTest.js",
-    "test:perf": "node test/performanceTest.js"
+    "test:perf": "node test/performanceTest.js",
+    "test:e2e": "node test/finalE2ETest.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
