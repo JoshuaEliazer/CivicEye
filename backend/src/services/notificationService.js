@@ -189,7 +189,8 @@ class NotificationService {
         .populate('complaint', 'complaintId issueType status location createdAt')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(safeLimit),
+        .limit(safeLimit)
+        .lean(),
       Notification.countDocuments(query),
       Notification.countDocuments({ user: userId, isRead: false }),
     ]);

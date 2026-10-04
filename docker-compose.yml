@@ -69,7 +69,7 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017/civiceye
       - ML_SERVICE_URL=http://ml-service:8000
       - ML_SERVICE_TIMEOUT_MS=10000
-      - JWT_SECRET=${JWT_SECRET:-civiceye_production_super_secret_jwt_key_2026}
+      - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=7d
       - STORAGE_TYPE=local
       - LOCAL_STORAGE_PATH=/app/uploads

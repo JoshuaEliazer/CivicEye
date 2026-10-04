@@ -1,8 +1,21 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
-const getJwtSecret = () =>
-  process.env.JWT_SECRET || 'civiceye_jwt_secret_key_2026_super_secure_key_civic_platform';
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  const DEFAULT_DEV_SECRET = 'civiceye_jwt_secret_key_2026_super_secure_key_civic_platform';
+
+  if (process.env.NODE_ENV === 'production') {
+    if (!secret || secret.trim() === '' || secret === DEFAULT_DEV_SECRET) {
+      throw new Error(
+        'FATAL SECURITY CONFIGURATION: A unique, secure JWT_SECRET environment variable must be explicitly configured in production mode.'
+      );
+    }
+    return secret.trim();
+  }
+
+  return secret ? secret.trim() : DEFAULT_DEV_SECRET;
+};
 
 const getJwtExpiresIn = () => process.env.JWT_EXPIRES_IN || '7d';
 

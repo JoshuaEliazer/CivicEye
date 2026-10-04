@@ -7,6 +7,7 @@ import {
 } from '../controllers/complaintController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { uploadSingleImage } from '../middleware/uploadMiddleware.js';
+import { submissionLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ const router = express.Router();
  * @desc    Submit a new civic complaint with image and run YOLO26 detection
  * @access  Protected (Requires Bearer token)
  */
-router.post('/', protect, uploadSingleImage, createComplaint);
+router.post('/', protect, submissionLimiter, uploadSingleImage, createComplaint);
 
 /**
  * @route   GET /api/complaints

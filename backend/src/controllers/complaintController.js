@@ -252,7 +252,16 @@ export const getMyComplaints = async (req, res, next) => {
       ];
     }
 
-    const complaints = await Complaint.find(query).sort({ createdAt: -1 });
+    // Bounded pagination with high safety ceiling to avoid unbounded memory leaks
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 100));
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const skip = (page - 1) * limit;
+
+    const complaints = await Complaint.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     return res.status(200).json({
       success: true,
@@ -273,7 +282,15 @@ export const getComplaintById = async (req, res, next) => {
   try {
     const { complaintId } = req.params;
 
-    const complaint = await Complaint.findOne({ complaintId });
+    if (!complaintId || typeof complaintId !== 'string' || complaintId.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid complaint ID provided.',
+        error: 'INVALID_COMPLAINT_ID',
+      });
+    }
+
+    const complaint = await Complaint.findOne({ complaintId: complaintId.trim() }).lean();
     if (!complaint) {
       return res.status(404).json({
         success: false,
@@ -315,7 +332,15 @@ export const getComplaintImage = async (req, res, next) => {
   try {
     const { complaintId } = req.params;
 
-    const complaint = await Complaint.findOne({ complaintId });
+    if (!complaintId || typeof complaintId !== 'string' || complaintId.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid complaint ID provided.',
+        error: 'INVALID_COMPLAINT_ID',
+      });
+    }
+
+    const complaint = await Complaint.findOne({ complaintId: complaintId.trim() }).lean();
     if (!complaint) {
       return res.status(404).json({
         success: false,

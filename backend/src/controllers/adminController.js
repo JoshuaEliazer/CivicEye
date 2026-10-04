@@ -75,17 +75,18 @@ export const getAllComplaints = async (req, res, next) => {
       }
     }
 
-    // 3. Query total count matching filter
-    const total = await Complaint.countDocuments(query);
+    // 3 & 4. Query total count and retrieve complaints in parallel with safe reporter population
+    const [total, complaints] = await Promise.all([
+      Complaint.countDocuments(query),
+      Complaint.find(query)
+        .populate('user', 'name email role createdAt')
+        .populate('userId', 'name email role createdAt')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+    ]);
     const totalPages = Math.ceil(total / limit) || 1;
-
-    // 4. Retrieve complaints with safe reporter population (passwords strictly excluded)
-    const complaints = await Complaint.find(query)
-      .populate('user', 'name email role createdAt')
-      .populate('userId', 'name email role createdAt')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
 
     return res.status(200).json({
       success: true,
@@ -111,17 +112,18 @@ export const getAdminComplaintById = async (req, res, next) => {
   try {
     const { complaintId } = req.params;
 
-    if (!complaintId || typeof complaintId !== 'string') {
-      return res.status(400).json({
+    if (!complaintId || typeof complaintId !== 'string' || complaintId.trim().length === 0) {
+      return res.status(404).json({
         success: false,
         message: 'Invalid complaint ID provided.',
-        error: 'INVALID_COMPLAINT_ID',
+        error: 'COMPLAINT_NOT_FOUND',
       });
     }
 
     const complaint = await Complaint.findOne({ complaintId: complaintId.trim() })
       .populate('user', 'name email role createdAt')
-      .populate('userId', 'name email role createdAt');
+      .populate('userId', 'name email role createdAt')
+      .lean();
 
     if (!complaint) {
       return res.status(404).json({

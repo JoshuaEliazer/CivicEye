@@ -62,7 +62,9 @@ CivicEye is an end-to-end full-stack Machine Learning application that enables c
 - **Phase 10**: User Dashboard & Complaint History (Completed — see [docs/dashboard.md](docs/dashboard.md))
 - **Phase 11**: Image Storage & Media Management (Completed — see [docs/image-storage.md](docs/image-storage.md))
 - **Phase 12**: Notifications & Complaint Status Updates (Completed — see [docs/notifications.md](docs/notifications.md))
+- **Phase 13**: Analytics, Reporting & City Insights (Completed — see [docs/analytics.md](docs/analytics.md))
 - **Phase 14**: Production Deployment, Containerization & CI/CD Pipeline (Completed — see [docs/deployment.md](docs/deployment.md))
+- **Phase 15**: Security & Performance Hardening (Completed — see [docs/security-hardening.md](docs/security-hardening.md))
 
 ---
 
@@ -139,4 +141,26 @@ cd frontend
 npm install
 npm run dev
 # Access: http://localhost:5173
+```
+
+---
+
+## Security & Performance Hardening (Phase 15)
+
+CivicEye incorporates comprehensive security defenses and performance optimizations:
+- **HTTP Security Headers**: Lightweight middleware enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `X-XSS-Protection: 0`, `Referrer-Policy`, `Permissions-Policy`, and strips `X-Powered-By`.
+- **Abuse Prevention & Rate Limiting**: In-memory sliding-window limiter guards `/api/*` (500 req/15m), `/api/auth/*` (30 attempts/15m), and complaint submission (60 uploads/15m) with automatic memory pruning.
+- **IDOR & Boundary Defense**: Strict user ownership verification across complaints, complaint images, and citizen notifications.
+- **Path Traversal Containment**: Client filenames are completely discarded; stored files use cryptographically secure random names contained inside the verified upload directory.
+- **MongoDB Indexing & Lean Queries**: Added compound indexes for high-throughput citizen complaint queries, unread notification counts, and administrative analytics. Read-heavy controller queries utilize `.lean()` to minimize memory footprint.
+- **Resource Limits**: 10MB image upload limit, 2MB JSON body parser limit, and bounded pagination caps across all endpoints.
+
+### Running Security & Hardening Tests
+
+```bash
+# Phase 15 Security Test Suite (32 automated scenarios)
+node backend/test/securityTest.js
+
+# Phase 15 Performance & Resource Bounding Suite (11 automated scenarios)
+node backend/test/performanceTest.js
 ```

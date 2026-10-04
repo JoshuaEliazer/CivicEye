@@ -10,11 +10,16 @@ import complaintRoutes from './routes/complaintRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
+import { securityHeaders } from './middleware/securityHeaders.js';
+import { apiLimiter } from './middleware/rateLimiter.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Security: Disable X-Powered-By header to prevent server fingerprinting
+app.disable('x-powered-by');
 
 // Resolve allowed CORS origins from environment
 const getCorsOrigin = () => {
@@ -28,6 +33,9 @@ const getCorsOrigin = () => {
   return '*';
 };
 
+// Security: Apply defensive HTTP headers across all incoming requests
+app.use(securityHeaders);
+
 // Middleware
 app.use(cors({
   origin: getCorsOrigin(),
@@ -35,8 +43,13 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// Security & Resource Limits: Strict payload limits to prevent memory exhaustion / payload bombing
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+// Abuse Protection: General API Rate Limiting
+app.use('/api', apiLimiter);
 
 // Routes
 app.use('/api', healthRoutes);
@@ -70,9 +83,16 @@ app.use((err, req, res, next) => {
     console.error('[CivicEye Error]:', err.stack || err);
   }
   const status = err.statusCode || err.status || 500;
+
+  // Security: In production, do not leak internal database/filesystem details on 500 errors
+  let safeMessage = err.message || 'Internal Server Error';
+  if (status === 500 && process.env.NODE_ENV === 'production') {
+    safeMessage = 'An unexpected internal server error occurred.';
+  }
+
   res.status(status).json({
     success: false,
-    message: err.message || 'Internal Server Error',
+    message: safeMessage,
     error: err.code || (status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_ERROR'),
     ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
   });

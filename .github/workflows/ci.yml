@@ -54,6 +54,20 @@ jobs:
           MONGODB_URI: mongodb://127.0.0.1:27017/civiceye_test
         run: node test/deploymentTest.js
 
+      - name: Run Phase 15 Security Test Suite
+        working-directory: ./backend
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://127.0.0.1:27017/civiceye_test
+        run: node test/securityTest.js
+
+      - name: Run Phase 15 Performance Test Suite
+        working-directory: ./backend
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://127.0.0.1:27017/civiceye_test
+        run: node test/performanceTest.js
+
   # --------------------------------------------------------------
   # 2. Frontend Production Build & Bundle Verification
   # --------------------------------------------------------------

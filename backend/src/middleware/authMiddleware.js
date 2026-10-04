@@ -1,8 +1,21 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
-const getJwtSecret = () =>
-  process.env.JWT_SECRET || 'civiceye_jwt_secret_key_2026_super_secure_key_civic_platform';
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  const DEFAULT_DEV_SECRET = 'civiceye_jwt_secret_key_2026_super_secure_key_civic_platform';
+
+  if (process.env.NODE_ENV === 'production') {
+    if (!secret || secret.trim() === '' || secret === DEFAULT_DEV_SECRET) {
+      throw new Error(
+        'FATAL SECURITY CONFIGURATION: A unique, secure JWT_SECRET environment variable must be explicitly configured in production mode.'
+      );
+    }
+    return secret.trim();
+  }
+
+  return secret ? secret.trim() : DEFAULT_DEV_SECRET;
+};
 
 /**
  * Protect routes: verifies JWT Bearer token and attaches user to req.user.
@@ -17,7 +30,7 @@ export const protect = async (req, res, next) => {
     token = String(req.query.token).trim();
   }
 
-  if (!token) {
+  if (!token || token.length === 0) {
     return res.status(401).json({
       success: false,
       message: 'Access denied. No authorization token provided. Format: Bearer <token>',
@@ -25,8 +38,25 @@ export const protect = async (req, res, next) => {
     });
   }
 
+  // Basic sanity check to reject obviously corrupted or non-JWT tokens safely
+  if (typeof token !== 'string' || token.split('.').length !== 3) {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid or malformed authorization token.',
+      error: 'INVALID_TOKEN',
+    });
+  }
+
   try {
     const decoded = jwt.verify(token, getJwtSecret());
+
+    if (!decoded || !decoded.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid token payload: missing user identifier.',
+        error: 'INVALID_TOKEN',
+      });
+    }
 
     // Fetch user from DB excluding password
     const user = await User.findById(decoded.id).select('-password');
@@ -49,7 +79,7 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    if (err.name === 'JsonWebTokenError') {
+    if (err.name === 'JsonWebTokenError' || err.name === 'NotBeforeError') {
       return res.status(401).json({
         success: false,
         message: 'Invalid or malformed authorization token.',

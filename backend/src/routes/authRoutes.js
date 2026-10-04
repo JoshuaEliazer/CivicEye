@@ -1,6 +1,7 @@
 import express from 'express';
 import { register, login, getMe, testProtected } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
+import { authLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -9,14 +10,14 @@ const router = express.Router();
  * @desc    Register a new user
  * @access  Public
  */
-router.post('/register', register);
+router.post('/register', authLimiter, register);
 
 /**
  * @route   POST /api/auth/login
  * @desc    Authenticate user and get token
  * @access  Public
  */
-router.post('/login', login);
+router.post('/login', authLimiter, login);
 
 /**
  * @route   GET /api/auth/me

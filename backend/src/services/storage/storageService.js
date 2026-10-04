@@ -88,6 +88,24 @@ class StorageService {
   }
 
   /**
+   * Resolve safe canonical path (delegates to provider).
+   */
+  resolveSafePath(storageKey) {
+    if (typeof this.provider.resolveSafePath === 'function') {
+      return this.provider.resolveSafePath(storageKey);
+    }
+  }
+
+  /**
+   * Generate safe filename (delegates to provider).
+   */
+  generateSafeFilename(originalName, complaintId) {
+    if (typeof this.provider.generateSafeFilename === 'function') {
+      return this.provider.generateSafeFilename(originalName, complaintId);
+    }
+  }
+
+  /**
    * Ensure directory exists (local storage helper).
    */
   async ensureDirectory(dirPath) {
