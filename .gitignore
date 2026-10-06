@@ -68,3 +68,14 @@ lerna-debug.log*
 *.sublime-workspace
 .DS_Store
 Thumbs.db
+
+# CivicEye ML datasets
+ml-service/data/
+ml-service/dataset_sources/
+
+# ML generated caches/artifacts
+ml-service/**/*.cache
+ml-service/runs/
+
+# Generated Vite timestamp files
+frontend/*.timestamp-*.mjs
