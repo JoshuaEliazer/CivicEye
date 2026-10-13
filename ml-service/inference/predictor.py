@@ -37,14 +37,16 @@ class CivicEyePredictor:
 
     def _initialize_model(self, model_path: Optional[str] = None):
         base_dir = Path(__file__).resolve().parent.parent
-        custom_weights = base_dir / "model" / "best.pt"
+        custom_weights = base_dir / "model" / "civiceye_yolo26n_v1.pt"
         default_weights = base_dir / "model" / "yolo26n.pt"
 
         self.custom_model_available = custom_weights.exists()
 
         if model_path and os.path.exists(model_path):
             target_path = Path(model_path)
-            self.is_custom_model = "best.pt" in str(target_path)
+            self.is_custom_model = (
+                target_path.resolve() != default_weights.resolve()
+            )
         elif self.custom_model_available:
             target_path = custom_weights
             self.is_custom_model = True
@@ -58,16 +60,22 @@ class CivicEyePredictor:
         self.model_path = str(target_path)
         try:
             self.model = YOLO(self.model_path)
-            # Update names map if model has names defined
             if hasattr(self.model, "names") and isinstance(self.model.names, dict):
                 self.classes_map = self.model.names
-            print(f"[CivicEyePredictor] Loaded model: {self.model_path} (Custom: {self.is_custom_model})")
+            print(
+                f"[CivicEyePredictor] Loaded model: {self.model_path} "
+                f"(Custom: {self.is_custom_model})"
+            )
         except Exception as e:
             self.model = None
-            print(f"[CivicEyePredictor] Error loading YOLO26 model from {self.model_path}: {e}")
+            print(
+                f"[CivicEyePredictor] Error loading YOLO26 model "
+                f"from {self.model_path}: {e}"
+            )
 
     def is_loaded(self) -> bool:
         return self.model is not None
+
 
     def get_model_info(self) -> Dict[str, Any]:
         return {
@@ -82,10 +90,15 @@ class CivicEyePredictor:
             "status_message": (
                 "Custom fine-tuned civic issue model active."
                 if self.is_custom_model
-                else "Custom trained YOLO26 model is not available yet. Using pretrained YOLO26n baseline."
+                else "Using pretrained YOLO26n baseline."
             ),
-            "supported_classes": list(self.classes_map.values()) if isinstance(self.classes_map, dict) else self.classes_map
+            "supported_classes": (
+                list(self.classes_map.values())
+                if isinstance(self.classes_map, dict)
+                else self.classes_map
+            ),
         }
+
 
     def predict(
         self,

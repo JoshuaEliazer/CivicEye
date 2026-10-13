@@ -23,10 +23,17 @@ app.add_middleware(
 )
 
 # Initialize predictor using configurable parameters
+
+# Initialize predictor using configurable parameters
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.50"))
+UNCERTAIN_THRESHOLD = float(os.getenv("UNCERTAIN_THRESHOLD", "0.05"))
 MODEL_PATH = os.getenv("MODEL_PATH", None)
 
-predictor = CivicEyePredictor(model_path=MODEL_PATH, conf_threshold=CONFIDENCE_THRESHOLD)
+predictor = CivicEyePredictor(
+    model_path=MODEL_PATH,
+    conf_threshold=CONFIDENCE_THRESHOLD,
+    uncertain_threshold=UNCERTAIN_THRESHOLD
+)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
